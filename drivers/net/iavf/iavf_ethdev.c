@@ -32,7 +32,7 @@
 static int iavf_dev_configure(struct rte_eth_dev *dev);
 static int iavf_dev_start(struct rte_eth_dev *dev);
 static void iavf_dev_stop(struct rte_eth_dev *dev);
-static void iavf_dev_close(struct rte_eth_dev *dev);
+static int iavf_dev_close(struct rte_eth_dev *dev);
 static int iavf_dev_reset(struct rte_eth_dev *dev);
 static int iavf_dev_info_get(struct rte_eth_dev *dev,
 			     struct rte_eth_dev_info *dev_info);
@@ -1412,11 +1412,6 @@ iavf_dev_init(struct rte_eth_dev *eth_dev)
 	adapter->eth_dev = eth_dev;
 	adapter->stopped = 1;
 
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
-
 	if (iavf_init_vf(eth_dev) != 0) {
 		PMD_INIT_LOG(ERR, "Init vf failed");
 		return -1;
@@ -1463,7 +1458,7 @@ iavf_dev_init(struct rte_eth_dev *eth_dev)
 	return 0;
 }
 
-static void
+static int
 iavf_dev_close(struct rte_eth_dev *dev)
 {
 	struct iavf_hw *hw = IAVF_DEV_PRIVATE_TO_HW(dev->data->dev_private);
@@ -1472,6 +1467,9 @@ iavf_dev_close(struct rte_eth_dev *dev)
 	struct iavf_adapter *adapter =
 		IAVF_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
 	struct iavf_info *vf = IAVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	iavf_dev_stop(dev);
 	iavf_flow_flush(dev, NULL);
@@ -1506,6 +1504,8 @@ iavf_dev_close(struct rte_eth_dev *dev)
 
 	rte_free(vf->aq_resp);
 	vf->aq_resp = NULL;
+
+	return 0;
 }
 
 static int

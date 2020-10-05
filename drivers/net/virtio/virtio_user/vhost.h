@@ -105,9 +105,14 @@ struct virtio_user_backend_ops {
 	int (*enable_qp)(struct virtio_user_dev *dev,
 			 uint16_t pair_idx,
 			 int enable);
+	int (*dma_map)(struct virtio_user_dev *dev, void *addr,
+				  uint64_t iova, size_t len);
+	int (*dma_unmap)(struct virtio_user_dev *dev, void *addr,
+				  uint64_t iova, size_t len);
 };
 
 extern struct virtio_user_backend_ops virtio_ops_user;
 extern struct virtio_user_backend_ops virtio_ops_kernel;
+extern struct virtio_user_backend_ops virtio_ops_vdpa;
 
 #endif

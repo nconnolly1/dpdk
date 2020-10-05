@@ -339,26 +339,26 @@ hns3_init_tx_queue_hw(struct hns3_tx_queue *txq)
 }
 
 void
-hns3_update_all_queues_pvid_state(struct hns3_hw *hw)
+hns3_update_all_queues_pvid_proc_en(struct hns3_hw *hw)
 {
 	uint16_t nb_rx_q = hw->data->nb_rx_queues;
 	uint16_t nb_tx_q = hw->data->nb_tx_queues;
 	struct hns3_rx_queue *rxq;
 	struct hns3_tx_queue *txq;
-	int pvid_state;
+	bool pvid_en;
 	int i;
 
-	pvid_state = hw->port_base_vlan_cfg.state;
+	pvid_en = hw->port_base_vlan_cfg.state == HNS3_PORT_BASE_VLAN_ENABLE;
 	for (i = 0; i < hw->cfg_max_queues; i++) {
 		if (i < nb_rx_q) {
 			rxq = hw->data->rx_queues[i];
 			if (rxq != NULL)
-				rxq->pvid_state = pvid_state;
+				rxq->pvid_sw_discard_en = pvid_en;
 		}
 		if (i < nb_tx_q) {
 			txq = hw->data->tx_queues[i];
 			if (txq != NULL)
-				txq->pvid_state = pvid_state;
+				txq->pvid_sw_shift_en = pvid_en;
 		}
 	}
 }
@@ -1405,7 +1405,20 @@ hns3_rx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t nb_desc,
 	rxq->pkt_first_seg = NULL;
 	rxq->pkt_last_seg = NULL;
 	rxq->port_id = dev->data->port_id;
-	rxq->pvid_state = hw->port_base_vlan_cfg.state;
+	/*
+	 * For hns3 PF device, if the VLAN mode is HW_SHIFT_AND_DISCARD_MODE,
+	 * the pvid_sw_discard_en in the queue struct should not be changed,
+	 * because PVID-related operations do not need to be processed by PMD
+	 * driver. For hns3 VF device, whether it needs to process PVID depends
+	 * on the configuration of PF kernel mode netdevice driver. And the
+	 * related PF configuration is delivered through the mailbox and finally
+	 * reflectd in port_base_vlan_cfg.
+	 */
+	if (hns->is_vf || hw->vlan_mode == HNS3_SW_SHIFT_AND_DISCARD_MODE)
+		rxq->pvid_sw_discard_en = hw->port_base_vlan_cfg.state ==
+				       HNS3_PORT_BASE_VLAN_ENABLE;
+	else
+		rxq->pvid_sw_discard_en = false;
 	rxq->configured = true;
 	rxq->io_base = (void *)((char *)hw->io_base + HNS3_TQP_REG_OFFSET +
 				idx * HNS3_TQP_REG_SIZE);
@@ -1592,7 +1605,7 @@ hns3_rxd_to_vlan_tci(struct hns3_rx_queue *rxq, struct rte_mbuf *mb,
 	};
 	strip_status = hns3_get_field(l234_info, HNS3_RXD_STRP_TAGP_M,
 				      HNS3_RXD_STRP_TAGP_S);
-	report_mode = report_type[rxq->pvid_state][strip_status];
+	report_mode = report_type[rxq->pvid_sw_discard_en][strip_status];
 	switch (report_mode) {
 	case HNS3_NO_STRP_VLAN_VLD:
 		mb->vlan_tci = 0;
@@ -1604,6 +1617,9 @@ hns3_rxd_to_vlan_tci(struct hns3_rx_queue *rxq, struct rte_mbuf *mb,
 	case HNS3_OUTER_STRP_VLAN_VLD:
 		mb->ol_flags |= PKT_RX_VLAN | PKT_RX_VLAN_STRIPPED;
 		mb->vlan_tci = rte_le_to_cpu_16(rxd->rx.ot_vlan_tag);
+		return;
+	default:
+		mb->vlan_tci = 0;
 		return;
 	}
 }
@@ -2151,13 +2167,28 @@ hns3_tx_queue_setup(struct rte_eth_dev *dev, uint16_t idx, uint16_t nb_desc,
 	}
 
 	txq->port_id = dev->data->port_id;
-	txq->pvid_state = hw->port_base_vlan_cfg.state;
+	/*
+	 * For hns3 PF device, if the VLAN mode is HW_SHIFT_AND_DISCARD_MODE,
+	 * the pvid_sw_shift_en in the queue struct should not be changed,
+	 * because PVID-related operations do not need to be processed by PMD
+	 * driver. For hns3 VF device, whether it needs to process PVID depends
+	 * on the configuration of PF kernel mode netdev driver. And the
+	 * related PF configuration is delivered through the mailbox and finally
+	 * reflectd in port_base_vlan_cfg.
+	 */
+	if (hns->is_vf || hw->vlan_mode == HNS3_SW_SHIFT_AND_DISCARD_MODE)
+		txq->pvid_sw_shift_en = hw->port_base_vlan_cfg.state ==
+					HNS3_PORT_BASE_VLAN_ENABLE;
+	else
+		txq->pvid_sw_shift_en = false;
+	txq->max_non_tso_bd_num = hw->max_non_tso_bd_num;
 	txq->configured = true;
 	txq->io_base = (void *)((char *)hw->io_base + HNS3_TQP_REG_OFFSET +
 				idx * HNS3_TQP_REG_SIZE);
 	txq->io_tail_reg = (volatile void *)((char *)txq->io_base +
 					     HNS3_RING_TX_TAIL_REG);
 	txq->min_tx_pkt_len = hw->min_tx_pkt_len;
+	txq->tso_mode = hw->tso_mode;
 	txq->over_length_pkt_cnt = 0;
 	txq->exceed_limit_bd_pkt_cnt = 0;
 	txq->exceed_limit_bd_reassem_fail = 0;
@@ -2352,7 +2383,7 @@ hns3_fill_first_desc(struct hns3_tx_queue *txq, struct hns3_desc *desc,
 	 * To avoid the VLAN of Tx descriptor is overwritten by PVID, it should
 	 * be added to the position close to the IP header when PVID is enabled.
 	 */
-	if (!txq->pvid_state && ol_flags & (PKT_TX_VLAN_PKT |
+	if (!txq->pvid_sw_shift_en && ol_flags & (PKT_TX_VLAN_PKT |
 				PKT_TX_QINQ_PKT)) {
 		desc->tx.ol_type_vlan_len_msec |=
 				rte_cpu_to_le_32(BIT(HNS3_TXD_OVLAN_B));
@@ -2365,7 +2396,7 @@ hns3_fill_first_desc(struct hns3_tx_queue *txq, struct hns3_desc *desc,
 	}
 
 	if (ol_flags & PKT_TX_QINQ_PKT ||
-	    ((ol_flags & PKT_TX_VLAN_PKT) && txq->pvid_state)) {
+	    ((ol_flags & PKT_TX_VLAN_PKT) && txq->pvid_sw_shift_en)) {
 		desc->tx.type_cs_vlan_tso_len |=
 					rte_cpu_to_le_32(BIT(HNS3_TXD_VLAN_B));
 		desc->tx.vlan_tag = rte_cpu_to_le_16(rxm->vlan_tci);
@@ -2409,7 +2440,8 @@ hns3_pktmbuf_copy_hdr(struct rte_mbuf *new_pkt, struct rte_mbuf *old_pkt)
 }
 
 static int
-hns3_reassemble_tx_pkts(struct rte_mbuf *tx_pkt, struct rte_mbuf **new_pkt)
+hns3_reassemble_tx_pkts(struct rte_mbuf *tx_pkt, struct rte_mbuf **new_pkt,
+				  uint8_t max_non_tso_bd_num)
 {
 	struct rte_mempool *mb_pool;
 	struct rte_mbuf *new_mbuf;
@@ -2429,7 +2461,7 @@ hns3_reassemble_tx_pkts(struct rte_mbuf *tx_pkt, struct rte_mbuf **new_pkt)
 	mb_pool = tx_pkt->pool;
 	buf_size = tx_pkt->buf_len - RTE_PKTMBUF_HEADROOM;
 	nb_new_buf = (rte_pktmbuf_pkt_len(tx_pkt) - 1) / buf_size + 1;
-	if (nb_new_buf > HNS3_MAX_NON_TSO_BD_PER_PKT)
+	if (nb_new_buf > max_non_tso_bd_num)
 		return -EINVAL;
 
 	last_buf_len = rte_pktmbuf_pkt_len(tx_pkt) % buf_size;
@@ -2661,7 +2693,8 @@ hns3_txd_enable_checksum(struct hns3_tx_queue *txq, uint16_t tx_desc_id,
 }
 
 static bool
-hns3_pkt_need_linearized(struct rte_mbuf *tx_pkts, uint32_t bd_num)
+hns3_pkt_need_linearized(struct rte_mbuf *tx_pkts, uint32_t bd_num,
+				 uint32_t max_non_tso_bd_num)
 {
 	struct rte_mbuf *m_first = tx_pkts;
 	struct rte_mbuf *m_last = tx_pkts;
@@ -2676,10 +2709,10 @@ hns3_pkt_need_linearized(struct rte_mbuf *tx_pkts, uint32_t bd_num)
 	 * frags greater than gso header len + mss, and the remaining 7
 	 * consecutive frags greater than MSS except the last 7 frags.
 	 */
-	if (bd_num <= HNS3_MAX_NON_TSO_BD_PER_PKT)
+	if (bd_num <= max_non_tso_bd_num)
 		return false;
 
-	for (i = 0; m_last && i < HNS3_MAX_NON_TSO_BD_PER_PKT - 1;
+	for (i = 0; m_last && i < max_non_tso_bd_num - 1;
 	     i++, m_last = m_last->next)
 		tot_len += m_last->data_len;
 
@@ -2697,7 +2730,7 @@ hns3_pkt_need_linearized(struct rte_mbuf *tx_pkts, uint32_t bd_num)
 	 * ensure the sum of the data length of every 7 consecutive buffer
 	 * is greater than mss except the last one.
 	 */
-	for (i = 0; m_last && i < bd_num - HNS3_MAX_NON_TSO_BD_PER_PKT; i++) {
+	for (i = 0; m_last && i < bd_num - max_non_tso_bd_num; i++) {
 		tot_len -= m_first->data_len;
 		tot_len += m_last->data_len;
 
@@ -2791,7 +2824,7 @@ hns3_vld_vlan_chk(struct hns3_tx_queue *txq, struct rte_mbuf *m)
 	struct rte_ether_hdr *eh;
 	struct rte_vlan_hdr *vh;
 
-	if (!txq->pvid_state)
+	if (!txq->pvid_sw_shift_en)
 		return 0;
 
 	/*
@@ -2826,43 +2859,66 @@ hns3_vld_vlan_chk(struct hns3_tx_queue *txq, struct rte_mbuf *m)
 }
 #endif
 
+static int
+hns3_prep_pkt_proc(struct hns3_tx_queue *tx_queue, struct rte_mbuf *m)
+{
+	int ret;
+
+#ifdef RTE_LIBRTE_ETHDEV_DEBUG
+	ret = rte_validate_tx_offload(m);
+	if (ret != 0) {
+		rte_errno = -ret;
+		return ret;
+	}
+
+	ret = hns3_vld_vlan_chk(tx_queue, m);
+	if (ret != 0) {
+		rte_errno = EINVAL;
+		return ret;
+	}
+#endif
+	if (hns3_pkt_is_tso(m)) {
+		if (hns3_pkt_need_linearized(m, m->nb_segs,
+					     tx_queue->max_non_tso_bd_num) ||
+		    hns3_check_tso_pkt_valid(m)) {
+			rte_errno = EINVAL;
+			return -EINVAL;
+		}
+
+		if (tx_queue->tso_mode != HNS3_TSO_SW_CAL_PSEUDO_H_CSUM) {
+			/*
+			 * (tso mode != HNS3_TSO_SW_CAL_PSEUDO_H_CSUM) means
+			 * hardware support recalculate the TCP pseudo header
+			 * checksum of packets that need TSO, so network driver
+			 * software not need to recalculate it.
+			 */
+			hns3_outer_header_cksum_prepare(m);
+			return 0;
+		}
+	}
+
+	ret = rte_net_intel_cksum_prepare(m);
+	if (ret != 0) {
+		rte_errno = -ret;
+		return ret;
+	}
+
+	hns3_outer_header_cksum_prepare(m);
+
+	return 0;
+}
+
 uint16_t
 hns3_prep_pkts(__rte_unused void *tx_queue, struct rte_mbuf **tx_pkts,
 	       uint16_t nb_pkts)
 {
 	struct rte_mbuf *m;
 	uint16_t i;
-	int ret;
 
 	for (i = 0; i < nb_pkts; i++) {
 		m = tx_pkts[i];
-
-		if (hns3_pkt_is_tso(m) &&
-		    (hns3_pkt_need_linearized(m, m->nb_segs) ||
-		     hns3_check_tso_pkt_valid(m))) {
-			rte_errno = EINVAL;
+		if (hns3_prep_pkt_proc(tx_queue, m))
 			return i;
-		}
-
-#ifdef RTE_LIBRTE_ETHDEV_DEBUG
-		ret = rte_validate_tx_offload(m);
-		if (ret != 0) {
-			rte_errno = -ret;
-			return i;
-		}
-
-		if (hns3_vld_vlan_chk(tx_queue, m)) {
-			rte_errno = EINVAL;
-			return i;
-		}
-#endif
-		ret = rte_net_intel_cksum_prepare(m);
-		if (ret != 0) {
-			rte_errno = -ret;
-			return i;
-		}
-
-		hns3_outer_header_cksum_prepare(m);
 	}
 
 	return i;
@@ -2892,6 +2948,7 @@ static int
 hns3_check_non_tso_pkt(uint16_t nb_buf, struct rte_mbuf **m_seg,
 		      struct rte_mbuf *tx_pkt, struct hns3_tx_queue *txq)
 {
+	uint8_t max_non_tso_bd_num;
 	struct rte_mbuf *new_pkt;
 	int ret;
 
@@ -2907,9 +2964,11 @@ hns3_check_non_tso_pkt(uint16_t nb_buf, struct rte_mbuf **m_seg,
 		return -EINVAL;
 	}
 
-	if (unlikely(nb_buf > HNS3_MAX_NON_TSO_BD_PER_PKT)) {
+	max_non_tso_bd_num = txq->max_non_tso_bd_num;
+	if (unlikely(nb_buf > max_non_tso_bd_num)) {
 		txq->exceed_limit_bd_pkt_cnt++;
-		ret = hns3_reassemble_tx_pkts(tx_pkt, &new_pkt);
+		ret = hns3_reassemble_tx_pkts(tx_pkt, &new_pkt,
+					      max_non_tso_bd_num);
 		if (ret) {
 			txq->exceed_limit_bd_reassem_fail++;
 			return ret;

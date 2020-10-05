@@ -183,7 +183,7 @@ static void eth_igc_stop(struct rte_eth_dev *dev);
 static int eth_igc_start(struct rte_eth_dev *dev);
 static int eth_igc_set_link_up(struct rte_eth_dev *dev);
 static int eth_igc_set_link_down(struct rte_eth_dev *dev);
-static void eth_igc_close(struct rte_eth_dev *dev);
+static int eth_igc_close(struct rte_eth_dev *dev);
 static int eth_igc_reset(struct rte_eth_dev *dev);
 static int eth_igc_promiscuous_enable(struct rte_eth_dev *dev);
 static int eth_igc_promiscuous_disable(struct rte_eth_dev *dev);
@@ -1165,7 +1165,7 @@ igc_dev_free_queues(struct rte_eth_dev *dev)
 	dev->data->nb_tx_queues = 0;
 }
 
-static void
+static int
 eth_igc_close(struct rte_eth_dev *dev)
 {
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
@@ -1175,6 +1175,8 @@ eth_igc_close(struct rte_eth_dev *dev)
 	int retry = 0;
 
 	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	if (!adapter->stopped)
 		eth_igc_stop(dev);
@@ -1199,6 +1201,8 @@ eth_igc_close(struct rte_eth_dev *dev)
 
 	/* Reset any pending lock */
 	igc_reset_swfw_lock(hw);
+
+	return 0;
 }
 
 static void
@@ -1321,11 +1325,6 @@ eth_igc_dev_init(struct rte_eth_dev *dev)
 		goto err_late;
 	}
 
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
-
 	hw->mac.get_link_status = 1;
 	igc->stopped = 0;
 
@@ -1366,10 +1365,6 @@ static int
 eth_igc_dev_uninit(__rte_unused struct rte_eth_dev *eth_dev)
 {
 	PMD_INIT_FUNC_TRACE();
-
-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		return 0;
-
 	eth_igc_close(eth_dev);
 	return 0;
 }

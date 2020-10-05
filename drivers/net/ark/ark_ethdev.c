@@ -30,7 +30,7 @@ static int eth_ark_dev_uninit(struct rte_eth_dev *eth_dev);
 static int eth_ark_dev_configure(struct rte_eth_dev *dev);
 static int eth_ark_dev_start(struct rte_eth_dev *dev);
 static void eth_ark_dev_stop(struct rte_eth_dev *dev);
-static void eth_ark_dev_close(struct rte_eth_dev *dev);
+static int eth_ark_dev_close(struct rte_eth_dev *dev);
 static int eth_ark_dev_info_get(struct rte_eth_dev *dev,
 				struct rte_eth_dev_info *dev_info);
 static int eth_ark_dev_link_update(struct rte_eth_dev *dev,
@@ -105,7 +105,7 @@ eth_ark_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 
 	ret = eth_ark_dev_init(eth_dev);
 	if (ret)
-		rte_eth_dev_pci_release(eth_dev);
+		rte_eth_dev_release_port(eth_dev);
 
 	return ret;
 }
@@ -260,8 +260,6 @@ eth_ark_dev_init(struct rte_eth_dev *dev)
 	/* Use dummy function until setup */
 	dev->rx_pkt_burst = &eth_ark_recv_pkts_noop;
 	dev->tx_pkt_burst = &eth_ark_xmit_pkts_noop;
-	/* Let rte_eth_dev_close() release the port resources */
-	dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	ark->bar0 = (uint8_t *)pci_dev->mem_resource[0].addr;
 	ark->a_bar = (uint8_t *)pci_dev->mem_resource[2].addr;
@@ -676,11 +674,14 @@ eth_ark_dev_stop(struct rte_eth_dev *dev)
 	}
 }
 
-static void
+static int
 eth_ark_dev_close(struct rte_eth_dev *dev)
 {
 	struct ark_adapter *ark = dev->data->dev_private;
 	uint16_t i;
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	if (ark->user_ext.dev_close)
 		ark->user_ext.dev_close(dev,
@@ -704,8 +705,7 @@ eth_ark_dev_close(struct rte_eth_dev *dev)
 		dev->data->rx_queues[i] = 0;
 	}
 
-	rte_free(dev->data->mac_addrs);
-	dev->data->mac_addrs = 0;
+	return 0;
 }
 
 static int

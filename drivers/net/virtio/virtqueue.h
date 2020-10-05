@@ -329,8 +329,11 @@ struct virtio_net_hdr_mrg_rxbuf {
 #define VIRTIO_MAX_TX_INDIRECT 8
 struct virtio_tx_region {
 	struct virtio_net_hdr_mrg_rxbuf tx_hdr;
-	struct vring_desc tx_indir[VIRTIO_MAX_TX_INDIRECT]
-		__rte_aligned(16);
+	union {
+		struct vring_desc tx_indir[VIRTIO_MAX_TX_INDIRECT];
+		struct vring_packed_desc
+			tx_packed_indir[VIRTIO_MAX_TX_INDIRECT];
+	} __rte_aligned(16);
 };
 
 static inline int
@@ -366,6 +369,16 @@ vring_desc_init_split(struct vring_desc *dp, uint16_t n)
 	for (i = 0; i < n - 1; i++)
 		dp[i].next = (uint16_t)(i + 1);
 	dp[i].next = VQ_RING_DESC_CHAIN_END;
+}
+
+static inline void
+vring_desc_init_indirect_packed(struct vring_packed_desc *dp, int n)
+{
+	int i;
+	for (i = 0; i < n; i++) {
+		dp[i].id = (uint16_t)i;
+		dp[i].flags = VRING_DESC_F_WRITE;
+	}
 }
 
 /**
@@ -673,7 +686,8 @@ virtqueue_xmit_offload(struct virtio_net_hdr *hdr,
 
 static inline void
 virtqueue_enqueue_xmit_packed(struct virtnet_tx *txvq, struct rte_mbuf *cookie,
-			      uint16_t needed, int can_push, int in_order)
+			      uint16_t needed, int use_indirect, int can_push,
+			      int in_order)
 {
 	struct virtio_tx_region *txr = txvq->virtio_net_hdr_mz->addr;
 	struct vq_desc_extra *dxp;
@@ -709,6 +723,25 @@ virtqueue_enqueue_xmit_packed(struct virtnet_tx *txvq, struct rte_mbuf *cookie,
 		/* if offload disabled, it is not zeroed below, do it now */
 		if (!vq->hw->has_tx_offload)
 			virtqueue_clear_net_hdr(hdr);
+	} else if (use_indirect) {
+		/* setup tx ring slot to point to indirect
+		 * descriptor list stored in reserved region.
+		 *
+		 * the first slot in indirect ring is already preset
+		 * to point to the header in reserved region
+		 */
+		start_dp[idx].addr  = txvq->virtio_net_hdr_mem +
+			RTE_PTR_DIFF(&txr[idx].tx_packed_indir, txr);
+		start_dp[idx].len   = (needed + 1) *
+			sizeof(struct vring_packed_desc);
+		/* reset flags for indirect desc */
+		head_flags = VRING_DESC_F_INDIRECT;
+		head_flags |= vq->vq_packed.cached_flags;
+		hdr = (struct virtio_net_hdr *)&txr[idx].tx_hdr;
+
+		/* loop below will fill in rest of the indirect elements */
+		start_dp = txr[idx].tx_packed_indir;
+		idx = 1;
 	} else {
 		/* setup first tx ring slot to point to header
 		 * stored in reserved region.
@@ -753,6 +786,15 @@ virtqueue_enqueue_xmit_packed(struct virtnet_tx *txvq, struct rte_mbuf *cookie,
 	} while ((cookie = cookie->next) != NULL);
 
 	start_dp[prev].id = id;
+
+	if (use_indirect) {
+		idx = head_idx;
+		if (++idx >= vq->vq_nentries) {
+			idx -= vq->vq_nentries;
+			vq->vq_packed.cached_flags ^=
+				VRING_PACKED_DESC_F_AVAIL_USED;
+		}
+	}
 
 	vq->vq_free_cnt = (uint16_t)(vq->vq_free_cnt - needed);
 	vq->vq_avail_idx = idx;

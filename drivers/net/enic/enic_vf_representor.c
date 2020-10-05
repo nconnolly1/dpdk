@@ -277,11 +277,12 @@ static void enic_vf_dev_stop(struct rte_eth_dev *eth_dev)
  * "close" is no-op for now and solely exists so that rte_eth_dev_close()
  * can finish its own cleanup without errors.
  */
-static void enic_vf_dev_close(struct rte_eth_dev *eth_dev __rte_unused)
+static int enic_vf_dev_close(struct rte_eth_dev *eth_dev __rte_unused)
 {
 	ENICPMD_FUNC_TRACE();
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		return;
+		return 0;
+	return 0;
 }
 
 static int
@@ -669,8 +670,7 @@ int enic_vf_representor_init(struct rte_eth_dev *eth_dev, void *init_params)
 
 	eth_dev->device->driver = pf->rte_dev->device->driver;
 	eth_dev->dev_ops = &enic_vf_representor_dev_ops;
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_REPRESENTOR
-		| RTE_ETH_DEV_CLOSE_REMOVE;
+	eth_dev->data->dev_flags |= RTE_ETH_DEV_REPRESENTOR;
 	eth_dev->data->representor_id = vf->vf_id;
 	eth_dev->data->mac_addrs = rte_zmalloc("enic_mac_addr_vf",
 		sizeof(struct rte_ether_addr) *

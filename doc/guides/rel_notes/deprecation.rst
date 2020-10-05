@@ -14,8 +14,8 @@ Deprecation Notices
 * meson: The minimum supported version of meson for configuring and building
   DPDK will be increased to v0.47.1 (from 0.41) from DPDK 19.05 onwards. For
   those users with a version earlier than 0.47.1, an updated copy of meson
-  can be got using the ``pip``, or ``pip3``, tool for downloading python
-  packages.
+  can be got using the ``pip3`` tool (or ``python3 -m pip``) for downloading
+  python packages.
 
 * kvargs: The function ``rte_kvargs_process`` will get a new parameter
   for returning key match count. It will ease handling of no-match case.
@@ -137,12 +137,6 @@ Deprecation Notices
   - ``rte_eth_dev_stop``
   - ``rte_eth_dev_close``
 
-* ethdev: The temporary flag RTE_ETH_DEV_CLOSE_REMOVE will be removed in 20.11.
-  As a consequence, the new behaviour introduced in 18.11 will be effective
-  for all drivers: generic port resources are freed on close operation.
-  Private resources are expected to be released in the ``dev_close`` callback.
-  More details in http://inbox.dpdk.org/dev/5248162.j6AOsuQRmx@thomas/
-
 * ethdev: New offload flags ``DEV_RX_OFFLOAD_FLOW_MARK`` will be added in 19.11.
   This will allow application to enable or disable PMDs from updating
   ``rte_mbuf::hash::fdir``.
@@ -176,12 +170,6 @@ Deprecation Notices
   additional values, indicating existence or absence of IPv6 extension headers
   following the IPv6 header, as proposed in RFC
   https://mails.dpdk.org/archives/dev/2020-August/177257.html.
-
-* vhost: Vhost-user dequeue zero-copy support will be removed in 20.11.
-  The only known user is OVS where the feature is still experimental,
-  and has not received any update for 2.5 years.
-  This feature faces reliability issues and is often conflicting with
-  new features being implemented.
 
 * security: The API ``rte_security_session_create`` takes only single mempool
   for session and session private data. So the application need to create
@@ -244,12 +232,6 @@ Deprecation Notices
   to set new power environment if power environment was already initialized.
   In this case the function will return -1 unless the environment is unset first
   (using ``rte_power_unset_env``). Other function usage scenarios will not change.
-
-* python: Since the beginning of 2020, Python 2 has officially reached
-  end-of-support: https://www.python.org/doc/sunset-python-2/.
-  Python 2 support will be completely removed in 20.11.
-  In 20.08, explicit deprecation warnings will be displayed when running
-  scripts with Python 2.
 
 * dpdk-setup.sh: This old script relies on deprecated stuff, and especially
   ``make``. Given environments are too much variables for such a simple script,

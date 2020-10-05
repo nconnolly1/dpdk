@@ -562,7 +562,7 @@ mlx5_rx_queue_stop(struct rte_eth_dev *dev, uint16_t idx)
 	 * The routine pointer depends on the process
 	 * type, should perform check there.
 	 */
-	if (pkt_burst == mlx5_rx_burst) {
+	if (pkt_burst == mlx5_rx_burst_vec) {
 		DRV_LOG(ERR, "Rx queue stop is not supported "
 			"for vectorized Rx");
 		rte_errno = EINVAL;
@@ -1090,7 +1090,7 @@ mlx5_mprq_buf_init(struct rte_mempool *mp, void *opaque_arg,
 
 	memset(_m, 0, sizeof(*buf));
 	buf->mp = mp;
-	rte_atomic16_set(&buf->refcnt, 1);
+	__atomic_store_n(&buf->refcnt, 1, __ATOMIC_RELAXED);
 	for (j = 0; j != strd_n; ++j) {
 		shinfo = &buf->shinfos[j];
 		shinfo->free_cb = mlx5_mprq_buf_free_cb;

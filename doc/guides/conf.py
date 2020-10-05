@@ -1,7 +1,7 @@
+#!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright(c) 2010-2015 Intel Corporation
 
-from __future__ import print_function
 from docutils import nodes
 from distutils.version import LooseVersion
 from sphinx import __version__ as sphinx_version
@@ -13,12 +13,7 @@ from os.path import basename
 from os.path import dirname
 from os.path import join as path_join
 
-try:
-    # Python 2.
-    import ConfigParser as configparser
-except:
-    # Python 3.
-    import configparser
+import configparser
 
 try:
     import sphinx_rtd_theme
@@ -27,7 +22,7 @@ try:
     html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 except:
     print('Install the sphinx ReadTheDocs theme for improved html documentation '
-          'layout: pip install sphinx_rtd_theme')
+          'layout: https://sphinx-rtd-theme.readthedocs.io/')
     pass
 
 project = 'Data Plane Development Kit'

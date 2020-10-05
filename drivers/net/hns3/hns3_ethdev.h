@@ -37,6 +37,9 @@
 #define HNS3_PF_FUNC_ID			0
 #define HNS3_1ST_VF_FUNC_ID		1
 
+#define HNS3_SW_SHIFT_AND_DISCARD_MODE		0
+#define HNS3_HW_SHIFT_AND_DISCARD_MODE		1
+
 #define HNS3_UC_MACADDR_NUM		128
 #define HNS3_VF_UC_MACADDR_NUM		48
 #define HNS3_MC_MACADDR_NUM		128
@@ -272,6 +275,13 @@ enum hns3_reset_level {
 	 * Kernel PF driver use mailbox to inform DPDK VF to do reset, the value
 	 * of the reset level and the one defined in kernel driver should be
 	 * same.
+	 *
+	 * According to the protocol of PCIe, FLR to a PF resets the PF state as
+	 * well as the SR-IOV extended capability including VF Enable which
+	 * means that VFs no longer exist.
+	 *
+	 * In PF FLR, the register state of VF is not reliable, VF's driver
+	 * should not access the registers of the VF device.
 	 */
 	HNS3_VF_FULL_RESET = 3,
 	HNS3_FLR_RESET,     /* A VF perform FLR reset */
@@ -413,6 +423,9 @@ struct hns3_queue_intr {
 	uint8_t gl_unit;
 };
 
+#define HNS3_TSO_SW_CAL_PSEUDO_H_CSUM		0
+#define HNS3_TSO_HW_CAL_PSEUDO_H_CSUM		1
+
 struct hns3_hw {
 	struct rte_eth_dev_data *data;
 	void *io_base;
@@ -473,7 +486,45 @@ struct hns3_hw {
 	uint32_t min_tx_pkt_len;
 
 	struct hns3_queue_intr intr;
-
+	/*
+	 * tso mode.
+	 * value range:
+	 *      HNS3_TSO_SW_CAL_PSEUDO_H_CSUM/HNS3_TSO_HW_CAL_PSEUDO_H_CSUM
+	 *
+	 *  - HNS3_TSO_SW_CAL_PSEUDO_H_CSUM
+	 *     In this mode, because of the hardware constraint, network driver
+	 *     software need erase the L4 len value of the TCP pseudo header
+	 *     and recalculate the TCP pseudo header checksum of packets that
+	 *     need TSO.
+	 *
+	 *  - HNS3_TSO_HW_CAL_PSEUDO_H_CSUM
+	 *     In this mode, hardware support recalculate the TCP pseudo header
+	 *     checksum of packets that need TSO, so network driver software
+	 *     not need to recalculate it.
+	 */
+	uint8_t tso_mode;
+	/*
+	 * vlan mode.
+	 * value range:
+	 *      HNS3_SW_SHIFT_AND_DISCARD_MODE/HNS3_HW_SHFIT_AND_DISCARD_MODE
+	 *
+	 *  - HNS3_SW_SHIFT_AND_DISCARD_MODE
+	 *     For some versions of hardware network engine, because of the
+	 *     hardware limitation, PMD driver needs to detect the PVID status
+	 *     to work with haredware to implement PVID-related functions.
+	 *     For example, driver need discard the stripped PVID tag to ensure
+	 *     the PVID will not report to mbuf and shift the inserted VLAN tag
+	 *     to avoid port based VLAN covering it.
+	 *
+	 *  - HNS3_HW_SHIT_AND_DISCARD_MODE
+	 *     PMD driver does not need to process PVID-related functions in
+	 *     I/O process, Hardware will adjust the sequence between port based
+	 *     VLAN tag and BD VLAN tag automatically and VLAN tag stripped by
+	 *     PVID will be invisible to driver. And in this mode, hns3 is able
+	 *     to send a multi-layer VLAN packets when hw VLAN insert offload
+	 *     is enabled.
+	 */
+	uint8_t vlan_mode;
 	uint8_t max_non_tso_bd_num; /* max BD number of one non-TSO packet */
 
 	struct hns3_port_base_vlan_config port_base_vlan_cfg;
@@ -532,11 +583,21 @@ struct hns3_user_vlan_table {
 
 /* Vlan tag configuration for RX direction */
 struct hns3_rx_vtag_cfg {
-	uint8_t rx_vlan_offload_en; /* Whether enable rx vlan offload */
-	uint8_t strip_tag1_en;      /* Whether strip inner vlan tag */
-	uint8_t strip_tag2_en;      /* Whether strip outer vlan tag */
-	uint8_t vlan1_vlan_prionly; /* Inner VLAN Tag up to descriptor Enable */
-	uint8_t vlan2_vlan_prionly; /* Outer VLAN Tag up to descriptor Enable */
+	bool rx_vlan_offload_en;    /* Whether enable rx vlan offload */
+	bool strip_tag1_en;         /* Whether strip inner vlan tag */
+	bool strip_tag2_en;         /* Whether strip outer vlan tag */
+	/*
+	 * If strip_tag_en is enabled, this bit decide whether to map the vlan
+	 * tag to descriptor.
+	 */
+	bool strip_tag1_discard_en;
+	bool strip_tag2_discard_en;
+	/*
+	 * If this bit is enabled, only map inner/outer priority to descriptor
+	 * and the vlan tag is always 0.
+	 */
+	bool vlan1_vlan_prionly;
+	bool vlan2_vlan_prionly;
 };
 
 /* Vlan tag configuration for TX direction */
@@ -545,10 +606,15 @@ struct hns3_tx_vtag_cfg {
 	bool accept_untag1;         /* Whether accept untag1 packet from host */
 	bool accept_tag2;
 	bool accept_untag2;
-	bool insert_tag1_en;        /* Whether insert inner vlan tag */
-	bool insert_tag2_en;        /* Whether insert outer vlan tag */
-	uint16_t default_tag1;      /* The default inner vlan tag to insert */
-	uint16_t default_tag2;      /* The default outer vlan tag to insert */
+	bool insert_tag1_en;        /* Whether insert outer vlan tag */
+	bool insert_tag2_en;        /* Whether insert inner vlan tag */
+	/*
+	 * In shift mode, hw will shift the sequence of port based VLAN and
+	 * BD VLAN.
+	 */
+	bool tag_shift_mode_en;     /* hw shift vlan tag automatically */
+	uint16_t default_tag1;      /* The default outer vlan tag to insert */
+	uint16_t default_tag2;      /* The default inner vlan tag to insert */
 };
 
 struct hns3_vtag_cfg {
@@ -653,7 +719,7 @@ struct hns3_adapter {
 #define HNS3_DEV_SUPPORT_DCB_B			0x0
 #define HNS3_DEV_SUPPORT_COPPER_B		0x1
 #define HNS3_DEV_SUPPORT_UDP_GSO_B		0x2
-#define HNS3_DEV_SUPPORT_ADQ_B			0x3
+#define HNS3_DEV_SUPPORT_FD_QUEUE_REGION_B	0x3
 #define HNS3_DEV_SUPPORT_PTP_B			0x4
 #define HNS3_DEV_SUPPORT_TX_PUSH_B		0x5
 #define HNS3_DEV_SUPPORT_INDEP_TXRX_B		0x6
@@ -670,9 +736,9 @@ struct hns3_adapter {
 #define hns3_dev_udp_gso_supported(hw) \
 	hns3_get_bit((hw)->capability, HNS3_DEV_SUPPORT_UDP_GSO_B)
 
-/* Support Application Device Queue */
-#define hns3_dev_adq_supported(hw) \
-	hns3_get_bit((hw)->capability, HNS3_DEV_SUPPORT_ADQ_B)
+/* Support the queue region action rule of flow directory */
+#define hns3_dev_fd_queue_region_supported(hw) \
+	hns3_get_bit((hw)->capability, HNS3_DEV_SUPPORT_FD_QUEUE_REGION_B)
 
 /* Support PTP timestamp offload */
 #define hns3_dev_ptp_supported(hw) \
@@ -723,6 +789,8 @@ struct hns3_adapter {
 #define lower_32_bits(n) ((uint32_t)(n))
 
 #define BIT(nr) (1UL << (nr))
+
+#define BIT_ULL(x) (1ULL << (x))
 
 #define BITS_PER_LONG	(__SIZEOF_LONG__ * 8)
 #define GENMASK(h, l) \

@@ -478,7 +478,7 @@ octeontx_dev_configure(struct rte_eth_dev *dev)
 	return 0;
 }
 
-static void
+static int
 octeontx_dev_close(struct rte_eth_dev *dev)
 {
 	struct octeontx_txq *txq = NULL;
@@ -487,6 +487,8 @@ octeontx_dev_close(struct rte_eth_dev *dev)
 	int ret;
 
 	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	rte_event_dev_close(nic->evdev);
 
@@ -509,14 +511,12 @@ octeontx_dev_close(struct rte_eth_dev *dev)
 		rte_free(txq);
 	}
 
-	/* Free MAC address table */
-	rte_free(dev->data->mac_addrs);
-	dev->data->mac_addrs = NULL;
-
 	octeontx_port_close(nic);
 
 	dev->tx_pkt_burst = NULL;
 	dev->rx_pkt_burst = NULL;
+
+	return 0;
 }
 
 static int
@@ -1463,10 +1463,9 @@ octeontx_remove(struct rte_vdev_device *dev)
 	for (i = 0; i < OCTEONTX_VDEV_DEFAULT_MAX_NR_PORT; i++) {
 		sprintf(octtx_name, "eth_octeontx_%d", i);
 
-		/* reserve an ethdev entry */
 		eth_dev = rte_eth_dev_allocated(octtx_name);
 		if (eth_dev == NULL)
-			return -ENODEV;
+			continue; /* port already released */
 
 		if (rte_eal_process_type() != RTE_PROC_PRIMARY) {
 			rte_eth_dev_release_port(eth_dev);
@@ -1476,9 +1475,8 @@ octeontx_remove(struct rte_vdev_device *dev)
 		nic = octeontx_pmd_priv(eth_dev);
 		rte_event_dev_stop(nic->evdev);
 		PMD_INIT_LOG(INFO, "Closing octeontx device %s", octtx_name);
-
+		octeontx_dev_close(eth_dev);
 		rte_eth_dev_release_port(eth_dev);
-		rte_event_dev_close(nic->evdev);
 	}
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)

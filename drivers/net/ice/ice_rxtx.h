@@ -42,6 +42,9 @@
 
 typedef void (*ice_rx_release_mbufs_t)(struct ice_rx_queue *rxq);
 typedef void (*ice_tx_release_mbufs_t)(struct ice_tx_queue *txq);
+typedef void (*ice_rxd_to_pkt_fields_t)(struct ice_rx_queue *rxq,
+					struct rte_mbuf *mb,
+					volatile union ice_rx_flex_desc *rxdp);
 
 struct ice_rx_entry {
 	struct rte_mbuf *mbuf;
@@ -68,7 +71,7 @@ struct ice_rx_queue {
 	uint16_t rxrearm_start;	/**< the idx we start the re-arming from */
 	uint64_t mbuf_initializer; /**< value to init mbufs */
 
-	uint8_t port_id; /* device port ID */
+	uint16_t port_id; /* device port ID */
 	uint8_t crc_len; /* 0 if CRC stripped, 4 otherwise */
 	uint8_t fdir_enabled; /* 0 if FDIR disabled, 1 when enabled */
 	uint16_t queue_id; /* RX queue index */
@@ -82,6 +85,8 @@ struct ice_rx_queue {
 	bool q_set; /* indicate if rx queue has been configured */
 	bool rx_deferred_start; /* don't start this queue in dev start */
 	uint8_t proto_xtr; /* Protocol extraction from flexible descriptor */
+	uint64_t xtr_ol_flag; /* Protocol extraction offload flag */
+	ice_rxd_to_pkt_fields_t rxd_to_pkt_fields; /* handle FlexiMD by RXDID */
 	ice_rx_release_mbufs_t rx_rel_mbufs;
 };
 
@@ -112,7 +117,7 @@ struct ice_tx_queue {
 	uint8_t pthresh; /**< Prefetch threshold register. */
 	uint8_t hthresh; /**< Host threshold register. */
 	uint8_t wthresh; /**< Write-back threshold reg. */
-	uint8_t port_id; /* Device port identifier. */
+	uint16_t port_id; /* Device port identifier. */
 	uint16_t queue_id; /* TX queue index. */
 	uint32_t q_teid; /* TX schedule node id. */
 	uint16_t reg_idx;

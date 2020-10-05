@@ -635,7 +635,7 @@ struct mlx5_dev_ctx_shared {
 	/* Direct Rules tables for FDB, NIC TX+RX */
 	void *esw_drop_action; /* Pointer to DR E-Switch drop action. */
 	void *pop_vlan_action; /* Pointer to DR pop VLAN action. */
-	uint32_t encaps_decaps; /* Encap/decap action indexed memory list. */
+	struct mlx5_hlist *encaps_decaps; /* Encap/decap action hash list. */
 	struct mlx5_hlist *modify_cmds;
 	struct mlx5_hlist *tag_table;
 	uint32_t port_id_action_list; /* List of port ID actions. */
@@ -779,6 +779,8 @@ struct mlx5_priv {
 	int32_t representor_id; /* Port representor identifier. */
 	int32_t pf_bond; /* >=0 means PF index in bonding configuration. */
 	unsigned int if_index; /* Associated kernel network device index. */
+	uint32_t bond_ifindex; /**< Bond interface index. */
+	char bond_name[IF_NAMESIZE]; /**< Bond interface name. */
 	/* RX/TX queues. */
 	unsigned int rxqs_n; /* RX queues array size. */
 	unsigned int txqs_n; /* TX queues array size. */
@@ -842,7 +844,7 @@ int mlx5_proc_priv_init(struct rte_eth_dev *dev);
 int mlx5_udp_tunnel_port_add(struct rte_eth_dev *dev,
 			      struct rte_eth_udp_tunnel *udp_tunnel);
 uint16_t mlx5_eth_find_next(uint16_t port_id, struct rte_pci_device *pci_dev);
-void mlx5_dev_close(struct rte_eth_dev *dev);
+int mlx5_dev_close(struct rte_eth_dev *dev);
 
 /* Macro to iterate over all valid ports for mlx5 driver. */
 #define MLX5_ETH_FOREACH_DEV(port_id, pci_dev) \
@@ -909,6 +911,8 @@ void mlx5_translate_port_name(const char *port_name_in,
 			      struct mlx5_switch_info *port_info_out);
 void mlx5_intr_callback_unregister(const struct rte_intr_handle *handle,
 				   rte_intr_callback_fn cb_fn, void *cb_arg);
+int mlx5_sysfs_bond_info(unsigned int pf_ifindex, unsigned int *ifindex,
+			 char *ifname);
 int mlx5_get_module_info(struct rte_eth_dev *dev,
 			 struct rte_eth_dev_module_info *modinfo);
 int mlx5_get_module_eeprom(struct rte_eth_dev *dev,

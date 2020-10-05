@@ -657,6 +657,9 @@ otx2_nix_rx_queue_setup(struct rte_eth_dev *eth_dev, uint16_t rq,
 		}
 	}
 
+	/* Setup scatter mode if needed by jumbo */
+	otx2_nix_enable_mseg_on_jumbo(rxq);
+
 	return 0;
 
 free_rxq:
@@ -876,6 +879,33 @@ nix_sqb_unlock(struct rte_mempool *mp)
 	}
 
 	return 0;
+}
+
+void
+otx2_nix_enable_mseg_on_jumbo(struct otx2_eth_rxq *rxq)
+{
+	struct rte_pktmbuf_pool_private *mbp_priv;
+	struct rte_eth_dev *eth_dev;
+	struct otx2_eth_dev *dev;
+	uint32_t buffsz;
+
+	eth_dev = rxq->eth_dev;
+	dev = otx2_eth_pmd_priv(eth_dev);
+
+	/* Get rx buffer size */
+	mbp_priv = rte_mempool_get_priv(rxq->pool);
+	buffsz = mbp_priv->mbuf_data_room_size - RTE_PKTMBUF_HEADROOM;
+
+	if (eth_dev->data->dev_conf.rxmode.max_rx_pkt_len > buffsz) {
+		dev->rx_offloads |= DEV_RX_OFFLOAD_SCATTER;
+		dev->tx_offloads |= DEV_TX_OFFLOAD_MULTI_SEGS;
+
+		/* Setting up the rx[tx]_offload_flags due to change
+		 * in rx[tx]_offloads.
+		 */
+		dev->rx_offload_flags |= nix_rx_offload_flags(eth_dev);
+		dev->tx_offload_flags |= nix_tx_offload_flags(eth_dev);
+	}
 }
 
 static int
@@ -2222,7 +2252,7 @@ rx_disable:
 }
 
 static int otx2_nix_dev_reset(struct rte_eth_dev *eth_dev);
-static void otx2_nix_dev_close(struct rte_eth_dev *eth_dev);
+static int otx2_nix_dev_close(struct rte_eth_dev *eth_dev);
 
 /* Initialize and register driver with DPDK Application */
 static const struct eth_dev_ops otx2_eth_dev_ops = {
@@ -2394,7 +2424,6 @@ otx2_eth_dev_init(struct rte_eth_dev *eth_dev)
 	pci_dev = RTE_ETH_DEV_TO_PCI(eth_dev);
 
 	rte_eth_copy_pci_info(eth_dev, pci_dev);
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	/* Zero out everything after OTX2_DEV to allow proper dev_reset() */
 	memset(&dev->otx2_eth_dev_data_start, 0, sizeof(*dev) -
@@ -2635,10 +2664,11 @@ otx2_eth_dev_uninit(struct rte_eth_dev *eth_dev, bool mbox_close)
 	return 0;
 }
 
-static void
+static int
 otx2_nix_dev_close(struct rte_eth_dev *eth_dev)
 {
 	otx2_eth_dev_uninit(eth_dev, true);
+	return 0;
 }
 
 static int
@@ -2668,7 +2698,7 @@ nix_remove(struct rte_pci_device *pci_dev)
 		if (rc)
 			return rc;
 
-		rte_eth_dev_pci_release(eth_dev);
+		rte_eth_dev_release_port(eth_dev);
 	}
 
 	/* Nothing to be done for secondary processes */

@@ -1852,13 +1852,15 @@ nicvf_vf_stop(struct rte_eth_dev *dev, struct nicvf *nic, bool cleanup)
 	}
 }
 
-static void
+static int
 nicvf_dev_close(struct rte_eth_dev *dev)
 {
 	size_t i;
 	struct nicvf *nic = nicvf_pmd_priv(dev);
 
 	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	nicvf_dev_stop_cleanup(dev, true);
 	nicvf_periodic_alarm_stop(nicvf_interrupt, dev);
@@ -1869,6 +1871,8 @@ nicvf_dev_close(struct rte_eth_dev *dev)
 
 		nicvf_periodic_alarm_stop(nicvf_vf_interrupt, nic->snicvf[i]);
 	}
+
+	return 0;
 }
 
 static int
@@ -2117,10 +2121,7 @@ static int
 nicvf_eth_dev_uninit(struct rte_eth_dev *dev)
 {
 	PMD_INIT_FUNC_TRACE();
-
-	if (rte_eal_process_type() == RTE_PROC_PRIMARY)
-		nicvf_dev_close(dev);
-
+	nicvf_dev_close(dev);
 	return 0;
 }
 static int

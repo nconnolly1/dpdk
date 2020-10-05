@@ -11,12 +11,11 @@
 #include "rte_time.h"
 
 static int eth_axgbe_dev_init(struct rte_eth_dev *eth_dev);
-static int eth_axgbe_dev_uninit(struct rte_eth_dev *eth_dev);
 static int  axgbe_dev_configure(struct rte_eth_dev *dev);
 static int  axgbe_dev_start(struct rte_eth_dev *dev);
 static void axgbe_dev_stop(struct rte_eth_dev *dev);
 static void axgbe_dev_interrupt_handler(void *param);
-static void axgbe_dev_close(struct rte_eth_dev *dev);
+static int axgbe_dev_close(struct rte_eth_dev *dev);
 static int axgbe_dev_promiscuous_enable(struct rte_eth_dev *dev);
 static int axgbe_dev_promiscuous_disable(struct rte_eth_dev *dev);
 static int axgbe_dev_allmulticast_enable(struct rte_eth_dev *dev);
@@ -407,13 +406,6 @@ axgbe_dev_stop(struct rte_eth_dev *dev)
 	pdata->hw_if.exit(pdata);
 	memset(&dev->data->dev_link, 0, sizeof(struct rte_eth_link));
 	rte_bit_relaxed_set32(AXGBE_DOWN, &pdata->dev_state);
-}
-
-/* Clear all resources like TX/RX queues. */
-static void
-axgbe_dev_close(struct rte_eth_dev *dev)
-{
-	axgbe_dev_clear_queues(dev);
 }
 
 static int
@@ -2132,7 +2124,7 @@ eth_axgbe_dev_init(struct rte_eth_dev *eth_dev)
 }
 
 static int
-eth_axgbe_dev_uninit(struct rte_eth_dev *eth_dev)
+axgbe_dev_close(struct rte_eth_dev *eth_dev)
 {
 	struct rte_pci_device *pci_dev;
 
@@ -2165,7 +2157,7 @@ static int eth_axgbe_pci_probe(struct rte_pci_driver *pci_drv __rte_unused,
 
 static int eth_axgbe_pci_remove(struct rte_pci_device *pci_dev)
 {
-	return rte_eth_dev_pci_generic_remove(pci_dev, eth_axgbe_dev_uninit);
+	return rte_eth_dev_pci_generic_remove(pci_dev, axgbe_dev_close);
 }
 
 static struct rte_pci_driver rte_axgbe_pmd = {

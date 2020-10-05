@@ -762,7 +762,7 @@ pci_vfio_map_resource_primary(struct rte_pci_device *dev)
 		}
 	}
 
-	for (i = 0; i < (int) vfio_res->nb_maps; i++) {
+	for (i = 0; i < vfio_res->nb_maps; i++) {
 		struct vfio_region_info *reg = NULL;
 		void *bar_addr;
 
@@ -838,7 +838,8 @@ pci_vfio_map_resource_primary(struct rte_pci_device *dev)
 err_vfio_res:
 	rte_free(vfio_res);
 err_vfio_dev_fd:
-	close(vfio_dev_fd);
+	rte_vfio_release_device(rte_pci_get_sysfs_path(),
+			pci_addr, vfio_dev_fd);
 	return -1;
 }
 
@@ -887,7 +888,7 @@ pci_vfio_map_resource_secondary(struct rte_pci_device *dev)
 	/* map BARs */
 	maps = vfio_res->maps;
 
-	for (i = 0; i < (int) vfio_res->nb_maps; i++) {
+	for (i = 0; i < vfio_res->nb_maps; i++) {
 		ret = pci_vfio_mmap_bar(vfio_dev_fd, vfio_res, i, MAP_FIXED);
 		if (ret < 0) {
 			RTE_LOG(ERR, EAL, "  %s mapping BAR%i failed: %s\n",
@@ -906,7 +907,8 @@ pci_vfio_map_resource_secondary(struct rte_pci_device *dev)
 
 	return 0;
 err_vfio_dev_fd:
-	close(vfio_dev_fd);
+	rte_vfio_release_device(rte_pci_get_sysfs_path(),
+			pci_addr, vfio_dev_fd);
 	return -1;
 }
 
@@ -946,7 +948,7 @@ find_and_unmap_vfio_resource(struct mapped_pci_res_list *vfio_res_list,
 		pci_addr);
 
 	maps = vfio_res->maps;
-	for (i = 0; i < (int) vfio_res->nb_maps; i++) {
+	for (i = 0; i < vfio_res->nb_maps; i++) {
 
 		/*
 		 * We do not need to be aware of MSI-X table BAR mappings as
@@ -1015,7 +1017,7 @@ pci_vfio_unmap_resource_primary(struct rte_pci_device *dev)
 	}
 
 	TAILQ_REMOVE(vfio_res_list, vfio_res, next);
-
+	rte_free(vfio_res);
 	return 0;
 }
 

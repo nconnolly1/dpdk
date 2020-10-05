@@ -783,6 +783,7 @@ hns3vf_dev_configure(struct rte_eth_dev *dev)
 	/* When RSS is not configured, redirect the packet queue 0 */
 	if ((uint32_t)mq_mode & ETH_MQ_RX_RSS_FLAG) {
 		conf->rxmode.offloads |= DEV_RX_OFFLOAD_RSS_HASH;
+		hw->rss_dis_flag = false;
 		rss_conf = conf->rx_adv_conf.rss_conf;
 		if (rss_conf.rss_key == NULL) {
 			rss_conf.rss_key = rss_cfg->key;
@@ -966,7 +967,7 @@ hns3vf_dev_infos_get(struct rte_eth_dev *eth_dev, struct rte_eth_dev_info *info)
 		.nb_min = HNS3_MIN_RING_DESC,
 		.nb_align = HNS3_ALIGN_RING_DESC,
 		.nb_seg_max = HNS3_MAX_TSO_BD_PER_PKT,
-		.nb_mtu_seg_max = HNS3_MAX_NON_TSO_BD_PER_PKT,
+		.nb_mtu_seg_max = hw->max_non_tso_bd_num,
 	};
 
 	info->default_rxconf = (struct rte_eth_rxconf) {
@@ -1165,6 +1166,7 @@ hns3vf_get_capability(struct hns3_hw *hw)
 		hw->intr.mapping_mode = HNS3_INTR_MAPPING_VEC_RSV_ONE;
 		hw->intr.coalesce_mode = HNS3_INTR_COALESCE_NON_QL;
 		hw->intr.gl_unit = HNS3_INTR_COALESCE_GL_UINT_2US;
+		hw->tso_mode = HNS3_TSO_SW_CAL_PSEUDO_H_CSUM;
 		hw->min_tx_pkt_len = HNS3_HIP08_MIN_TX_PKT_LEN;
 		return 0;
 	}
@@ -1180,6 +1182,7 @@ hns3vf_get_capability(struct hns3_hw *hw)
 	hw->intr.mapping_mode = HNS3_INTR_MAPPING_VEC_ALL;
 	hw->intr.coalesce_mode = HNS3_INTR_COALESCE_QL;
 	hw->intr.gl_unit = HNS3_INTR_COALESCE_GL_UINT_1US;
+	hw->tso_mode = HNS3_TSO_HW_CAL_PSEUDO_H_CSUM;
 	hw->min_tx_pkt_len = HNS3_HIP09_MIN_TX_PKT_LEN;
 
 	return 0;
@@ -1910,14 +1913,14 @@ hns3vf_dev_stop(struct rte_eth_dev *dev)
 	rte_spinlock_unlock(&hw->lock);
 }
 
-static void
+static int
 hns3vf_dev_close(struct rte_eth_dev *eth_dev)
 {
 	struct hns3_adapter *hns = eth_dev->data->dev_private;
 	struct hns3_hw *hw = &hns->hw;
 
 	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		return;
+		return 0;
 
 	if (hw->adapter_state == HNS3_NIC_STARTED)
 		hns3vf_dev_stop(eth_dev);
@@ -1935,6 +1938,8 @@ hns3vf_dev_close(struct rte_eth_dev *eth_dev)
 	eth_dev->process_private = NULL;
 	hns3_mp_uninit_primary();
 	hns3_warn(hw, "Close port %d finished", hw->data->port_id);
+
+	return 0;
 }
 
 static int
@@ -2189,6 +2194,21 @@ hns3vf_is_reset_pending(struct hns3_adapter *hns)
 	struct hns3_hw *hw = &hns->hw;
 	enum hns3_reset_level reset;
 
+	/*
+	 * According to the protocol of PCIe, FLR to a PF device resets the PF
+	 * state as well as the SR-IOV extended capability including VF Enable
+	 * which means that VFs no longer exist.
+	 *
+	 * HNS3_VF_FULL_RESET means PF device is in FLR reset. when PF device
+	 * is in FLR stage, the register state of VF device is not reliable,
+	 * so register states detection can not be carried out. In this case,
+	 * we just ignore the register states and return false to indicate that
+	 * there are no other reset states that need to be processed by driver.
+	 */
+	if (hw->reset.level == HNS3_VF_FULL_RESET)
+		return false;
+
+	/* Check the registers to confirm whether there is reset pending */
 	hns3vf_check_event_cause(hns, NULL);
 	reset = hns3vf_get_reset_level(hw, &hw->reset.pending);
 	if (hw->reset.level != HNS3_NONE_RESET && hw->reset.level < reset) {
@@ -2682,11 +2702,6 @@ hns3vf_dev_init(struct rte_eth_dev *eth_dev)
 			    &eth_dev->data->mac_addrs[0]);
 
 	hw->adapter_state = HNS3_NIC_INITIALIZED;
-	/*
-	 * Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	if (rte_atomic16_read(&hns->hw.reset.schedule) == SCHEDULE_PENDING) {
 		hns3_err(hw, "Reschedule reset service after dev_init");

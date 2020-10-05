@@ -250,6 +250,14 @@ mlx5_alloc_shared_dr(struct mlx5_priv *priv)
 		err = ENOMEM;
 		goto error;
 	}
+	snprintf(s, sizeof(s), "%s_encaps_decaps", sh->ibdev_name);
+	sh->encaps_decaps = mlx5_hlist_create(s,
+					      MLX5_FLOW_ENCAP_DECAP_HTABLE_SZ);
+	if (!sh->encaps_decaps) {
+		DRV_LOG(ERR, "encap decap hash creation failed");
+		err = ENOMEM;
+		goto error;
+	}
 #ifdef HAVE_MLX5DV_DR
 	void *domain;
 
@@ -323,6 +331,10 @@ error:
 		mlx5_glue->destroy_flow_action(sh->pop_vlan_action);
 		sh->pop_vlan_action = NULL;
 	}
+	if (sh->encaps_decaps) {
+		mlx5_hlist_destroy(sh->encaps_decaps, NULL, NULL);
+		sh->encaps_decaps = NULL;
+	}
 	if (sh->modify_cmds) {
 		mlx5_hlist_destroy(sh->modify_cmds, NULL, NULL);
 		sh->modify_cmds = NULL;
@@ -380,6 +392,10 @@ mlx5_os_free_shared_dr(struct mlx5_priv *priv)
 	}
 	pthread_mutex_destroy(&sh->dv_mutex);
 #endif /* HAVE_MLX5DV_DR */
+	if (sh->encaps_decaps) {
+		mlx5_hlist_destroy(sh->encaps_decaps, NULL, NULL);
+		sh->encaps_decaps = NULL;
+	}
 	if (sh->modify_cmds) {
 		mlx5_hlist_destroy(sh->modify_cmds, NULL, NULL);
 		sh->modify_cmds = NULL;
@@ -1155,8 +1171,6 @@ err_secondary:
 		err = ENOMEM;
 		goto error;
 	}
-	/* Flag to call rte_eth_dev_release_port() in rte_eth_dev_close(). */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 	if (priv->representor) {
 		eth_dev->data->dev_flags |= RTE_ETH_DEV_REPRESENTOR;
 		eth_dev->data->representor_id = priv->representor_id;
@@ -1168,6 +1182,19 @@ err_secondary:
 	 */
 	MLX5_ASSERT(spawn->ifindex);
 	priv->if_index = spawn->ifindex;
+	if (priv->pf_bond >= 0 && priv->master) {
+		/* Get bond interface info */
+		err = mlx5_sysfs_bond_info(priv->if_index,
+				     &priv->bond_ifindex,
+				     priv->bond_name);
+		if (err)
+			DRV_LOG(ERR, "unable to get bond info: %s",
+				strerror(rte_errno));
+		else
+			DRV_LOG(INFO, "PF device %u, bond device %u(%s)",
+				priv->if_index, priv->bond_ifindex,
+				priv->bond_name);
+	}
 	eth_dev->data->dev_private = priv;
 	priv->dev_data = eth_dev->data;
 	eth_dev->data->mac_addrs = priv->mac;

@@ -1841,9 +1841,10 @@ fm10k_rx_queue_setup(struct rte_eth_dev *dev, uint16_t queue_id,
 	q->tail_ptr = (volatile uint32_t *)
 		&((uint32_t *)hw->hw_addr)[FM10K_RDT(queue_id)];
 	q->offloads = offloads;
-	if (handle_rxconf(q, conf))
+	if (handle_rxconf(q, conf)) {
+		rte_free(q);
 		return -EINVAL;
-
+	}
 	/* allocate memory for the software ring */
 	q->sw_ring = rte_zmalloc_socket("fm10k sw ring",
 			(nb_desc + q->nb_fake_desc) * sizeof(struct rte_mbuf *),
@@ -2776,7 +2777,7 @@ fm10k_close_mbx_service(struct fm10k_hw *hw)
 	hw->mbx.ops.disconnect(hw, &hw->mbx);
 }
 
-static void
+static int
 fm10k_dev_close(struct rte_eth_dev *dev)
 {
 	struct fm10k_hw *hw = FM10K_DEV_PRIVATE_TO_HW(dev->data->dev_private);
@@ -2784,6 +2785,8 @@ fm10k_dev_close(struct rte_eth_dev *dev)
 	struct rte_intr_handle *intr_handle = &pdev->intr_handle;
 
 	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	fm10k_mbx_lock(hw);
 	hw->mac.ops.update_lport_state(hw, hw->mac.dglort_map,
@@ -2821,6 +2824,8 @@ fm10k_dev_close(struct rte_eth_dev *dev)
 		rte_intr_callback_unregister(intr_handle,
 			fm10k_dev_interrupt_handler_vf, (void *)dev);
 	}
+
+	return 0;
 }
 
 static const struct eth_dev_ops fm10k_eth_dev_ops = {
@@ -3127,11 +3132,6 @@ eth_fm10k_dev_init(struct rte_eth_dev *dev)
 		&dev->data->mac_addrs[0]);
 	}
 
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
-
 	/* Reset the hw statistics */
 	diag = fm10k_stats_reset(dev);
 	if (diag != 0) {
@@ -3239,14 +3239,7 @@ static int
 eth_fm10k_dev_uninit(struct rte_eth_dev *dev)
 {
 	PMD_INIT_FUNC_TRACE();
-
-	/* only uninitialize in the primary process */
-	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
-		return 0;
-
-	/* safe to close dev here */
 	fm10k_dev_close(dev);
-
 	return 0;
 }
 

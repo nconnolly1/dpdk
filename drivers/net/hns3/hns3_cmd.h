@@ -278,7 +278,7 @@ struct hns3_rx_priv_buff_cmd {
 enum HNS3_CAPS_BITS {
 	HNS3_CAPS_UDP_GSO_B,
 	HNS3_CAPS_ATR_B,
-	HNS3_CAPS_ADQ_B,
+	HNS3_CAPS_FD_QUEUE_REGION_B,
 	HNS3_CAPS_PTP_B,
 	HNS3_CAPS_INT_QL_B,
 	HNS3_CAPS_SIMPLE_BD_B,
@@ -449,11 +449,14 @@ struct hns3_umv_spc_alc_cmd {
 #define HNS3_CFG_NIC_ROCE_SEL_B		4
 #define HNS3_ACCEPT_TAG2_B		5
 #define HNS3_ACCEPT_UNTAG2_B		6
+#define HNS3_TAG_SHIFT_MODE_EN_B	7
 
 #define HNS3_REM_TAG1_EN_B		0
 #define HNS3_REM_TAG2_EN_B		1
 #define HNS3_SHOW_TAG1_EN_B		2
 #define HNS3_SHOW_TAG2_EN_B		3
+#define HNS3_DISCARD_TAG1_EN_B		5
+#define HNS3_DISCARD_TAG2_EN_B		6
 
 /* Factor used to calculate offset and bitmap of VF num */
 #define HNS3_VF_NUM_PER_CMD             64
@@ -560,14 +563,7 @@ struct hns3_rss_generic_config_cmd {
 
 /* Configure the tuple selection for RSS hash input, opcode:0x0D02 */
 struct hns3_rss_input_tuple_cmd {
-	uint8_t ipv4_tcp_en;
-	uint8_t ipv4_udp_en;
-	uint8_t ipv4_sctp_en;
-	uint8_t ipv4_fragment_en;
-	uint8_t ipv6_tcp_en;
-	uint8_t ipv6_udp_en;
-	uint8_t ipv6_sctp_en;
-	uint8_t ipv6_fragment_en;
+	uint64_t tuple_field;
 	uint8_t rsv[16];
 };
 

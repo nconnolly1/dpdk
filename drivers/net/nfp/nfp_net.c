@@ -50,7 +50,7 @@
 #include <errno.h>
 
 /* Prototypes */
-static void nfp_net_close(struct rte_eth_dev *dev);
+static int nfp_net_close(struct rte_eth_dev *dev);
 static int nfp_net_configure(struct rte_eth_dev *dev);
 static void nfp_net_dev_interrupt_handler(void *param);
 static void nfp_net_dev_interrupt_delayed_handler(void *param);
@@ -864,12 +864,15 @@ nfp_net_set_link_down(struct rte_eth_dev *dev)
 }
 
 /* Reset and stop device. The device can not be restarted. */
-static void
+static int
 nfp_net_close(struct rte_eth_dev *dev)
 {
 	struct nfp_net_hw *hw;
 	struct rte_pci_device *pci_dev;
 	int i;
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	PMD_INIT_LOG(DEBUG, "Close");
 
@@ -906,6 +909,8 @@ nfp_net_close(struct rte_eth_dev *dev)
 	 * The ixgbe PMD driver disables the pcie master on the
 	 * device. The i40e does not...
 	 */
+
+	return 0;
 }
 
 static int
@@ -3737,6 +3742,8 @@ static int eth_nfp_pci_remove(struct rte_pci_device *pci_dev)
 	int port = 0;
 
 	eth_dev = rte_eth_dev_allocated(pci_dev->device.name);
+	if (eth_dev == NULL)
+		return 0; /* port already released */
 	if ((pci_dev->id.device_id == PCI_DEVICE_ID_NFP4000_PF_NIC) ||
 	    (pci_dev->id.device_id == PCI_DEVICE_ID_NFP6000_PF_NIC)) {
 		port = get_pf_port_number(eth_dev->data->name);

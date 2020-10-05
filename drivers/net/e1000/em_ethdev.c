@@ -34,7 +34,7 @@
 static int eth_em_configure(struct rte_eth_dev *dev);
 static int eth_em_start(struct rte_eth_dev *dev);
 static void eth_em_stop(struct rte_eth_dev *dev);
-static void eth_em_close(struct rte_eth_dev *dev);
+static int eth_em_close(struct rte_eth_dev *dev);
 static int eth_em_promiscuous_enable(struct rte_eth_dev *dev);
 static int eth_em_promiscuous_disable(struct rte_eth_dev *dev);
 static int eth_em_allmulticast_enable(struct rte_eth_dev *dev);
@@ -296,11 +296,6 @@ eth_em_dev_init(struct rte_eth_dev *eth_dev)
 	/* Copy the permanent MAC address */
 	rte_ether_addr_copy((struct rte_ether_addr *)hw->mac.addr,
 		eth_dev->data->mac_addrs);
-
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	/* initialize the vfta */
 	memset(shadow_vfta, 0, sizeof(*shadow_vfta));
@@ -758,7 +753,7 @@ eth_em_stop(struct rte_eth_dev *dev)
 	}
 }
 
-static void
+static int
 eth_em_close(struct rte_eth_dev *dev)
 {
 	struct e1000_hw *hw = E1000_DEV_PRIVATE_TO_HW(dev->data->dev_private);
@@ -766,6 +761,9 @@ eth_em_close(struct rte_eth_dev *dev)
 		E1000_DEV_PRIVATE(dev->data->dev_private);
 	struct rte_pci_device *pci_dev = RTE_ETH_DEV_TO_PCI(dev);
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	eth_em_stop(dev);
 	adapter->stopped = 1;
@@ -782,6 +780,8 @@ eth_em_close(struct rte_eth_dev *dev)
 	rte_intr_disable(intr_handle);
 	rte_intr_callback_unregister(intr_handle,
 				     eth_em_interrupt_handler, dev);
+
+	return 0;
 }
 
 static int

@@ -90,7 +90,7 @@ static int i40evf_dev_xstats_reset(struct rte_eth_dev *dev);
 static int i40evf_vlan_filter_set(struct rte_eth_dev *dev,
 				  uint16_t vlan_id, int on);
 static int i40evf_vlan_offload_set(struct rte_eth_dev *dev, int mask);
-static void i40evf_dev_close(struct rte_eth_dev *dev);
+static int i40evf_dev_close(struct rte_eth_dev *dev);
 static int i40evf_dev_reset(struct rte_eth_dev *dev);
 static int i40evf_check_vf_reset_done(struct rte_eth_dev *dev);
 static int i40evf_dev_promiscuous_enable(struct rte_eth_dev *dev);
@@ -1586,11 +1586,6 @@ i40evf_dev_init(struct rte_eth_dev *eth_dev)
 	hw->adapter_stopped = 1;
 	hw->adapter_closed = 0;
 
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
-
 	if(i40evf_init_vf(eth_dev) != 0) {
 		PMD_INIT_LOG(ERR, "Init vf failed");
 		return -1;
@@ -2401,11 +2396,14 @@ i40evf_dev_stats_get(struct rte_eth_dev *dev, struct rte_eth_stats *stats)
 	return ret;
 }
 
-static void
+static int
 i40evf_dev_close(struct rte_eth_dev *dev)
 {
 	struct i40e_hw *hw = I40E_DEV_PRIVATE_TO_HW(dev->data->dev_private);
 	struct i40e_vf *vf = I40EVF_DEV_PRIVATE_TO_VF(dev->data->dev_private);
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	i40evf_dev_stop(dev);
 	i40e_dev_free_queues(dev);
@@ -2433,6 +2431,7 @@ i40evf_dev_close(struct rte_eth_dev *dev)
 	vf->aq_resp = NULL;
 
 	hw->adapter_closed = 1;
+	return 0;
 }
 
 /*

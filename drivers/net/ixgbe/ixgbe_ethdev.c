@@ -147,7 +147,7 @@ static int  ixgbe_dev_start(struct rte_eth_dev *dev);
 static void ixgbe_dev_stop(struct rte_eth_dev *dev);
 static int  ixgbe_dev_set_link_up(struct rte_eth_dev *dev);
 static int  ixgbe_dev_set_link_down(struct rte_eth_dev *dev);
-static void ixgbe_dev_close(struct rte_eth_dev *dev);
+static int  ixgbe_dev_close(struct rte_eth_dev *dev);
 static int  ixgbe_dev_reset(struct rte_eth_dev *dev);
 static int ixgbe_dev_promiscuous_enable(struct rte_eth_dev *dev);
 static int ixgbe_dev_promiscuous_disable(struct rte_eth_dev *dev);
@@ -251,7 +251,7 @@ static int  ixgbevf_dev_start(struct rte_eth_dev *dev);
 static int ixgbevf_dev_link_update(struct rte_eth_dev *dev,
 				   int wait_to_complete);
 static void ixgbevf_dev_stop(struct rte_eth_dev *dev);
-static void ixgbevf_dev_close(struct rte_eth_dev *dev);
+static int ixgbevf_dev_close(struct rte_eth_dev *dev);
 static int  ixgbevf_dev_reset(struct rte_eth_dev *dev);
 static void ixgbevf_intr_disable(struct rte_eth_dev *dev);
 static void ixgbevf_intr_enable(struct rte_eth_dev *dev);
@@ -1248,11 +1248,6 @@ eth_ixgbe_dev_init(struct rte_eth_dev *eth_dev, void *init_params __rte_unused)
 		return -ENOMEM;
 	}
 
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
-
 	/* initialize the vfta */
 	memset(shadow_vfta, 0, sizeof(*shadow_vfta));
 
@@ -1662,11 +1657,6 @@ eth_ixgbevf_dev_init(struct rte_eth_dev *eth_dev)
 			     RTE_ETHER_ADDR_LEN * hw->mac.num_rar_entries);
 		return -ENOMEM;
 	}
-
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	/* Generate a random MAC address, if none was assigned by PF. */
 	if (rte_is_zero_ether_addr(perm_addr)) {
@@ -2994,7 +2984,7 @@ ixgbe_dev_set_link_down(struct rte_eth_dev *dev)
 /*
  * Reset and stop device.
  */
-static void
+static int
 ixgbe_dev_close(struct rte_eth_dev *dev)
 {
 	struct ixgbe_hw *hw =
@@ -3005,6 +2995,8 @@ ixgbe_dev_close(struct rte_eth_dev *dev)
 	int ret;
 
 	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	ixgbe_pf_reset_hw(hw);
 
@@ -3065,6 +3057,7 @@ ixgbe_dev_close(struct rte_eth_dev *dev)
 	rte_free(dev->security_ctx);
 #endif
 
+	return 0;
 }
 
 /*
@@ -5320,10 +5313,16 @@ ixgbevf_dev_start(struct rte_eth_dev *dev)
 	ixgbe_dev_wait_setup_link_complete(dev, 0);
 
 	err = hw->mac.ops.reset_hw(hw);
-	if (err) {
+
+	/**
+	 * In this case, reuses the MAC address assigned by VF
+	 * initialization.
+	 */
+	if (err != IXGBE_SUCCESS && err != IXGBE_ERR_INVALID_MAC_ADDR) {
 		PMD_INIT_LOG(ERR, "Unable to reset vf hardware (%d)", err);
 		return err;
 	}
+
 	hw->mac.get_link_status = true;
 
 	/* negotiate mailbox API version to use with the PF. */
@@ -5443,7 +5442,7 @@ ixgbevf_dev_stop(struct rte_eth_dev *dev)
 	adapter->rss_reta_updated = 0;
 }
 
-static void
+static int
 ixgbevf_dev_close(struct rte_eth_dev *dev)
 {
 	struct ixgbe_hw *hw = IXGBE_DEV_PRIVATE_TO_HW(dev->data->dev_private);
@@ -5451,6 +5450,8 @@ ixgbevf_dev_close(struct rte_eth_dev *dev)
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 
 	PMD_INIT_FUNC_TRACE();
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	ixgbe_reset_hw(hw);
 
@@ -5472,6 +5473,8 @@ ixgbevf_dev_close(struct rte_eth_dev *dev)
 	rte_intr_disable(intr_handle);
 	rte_intr_callback_unregister(intr_handle,
 				     ixgbevf_dev_interrupt_handler, dev);
+
+	return 0;
 }
 
 /*

@@ -77,7 +77,7 @@ static struct proto_xtr_ol_flag ice_proto_xtr_ol_flag_params[] = {
 static int ice_dev_configure(struct rte_eth_dev *dev);
 static int ice_dev_start(struct rte_eth_dev *dev);
 static void ice_dev_stop(struct rte_eth_dev *dev);
-static void ice_dev_close(struct rte_eth_dev *dev);
+static int ice_dev_close(struct rte_eth_dev *dev);
 static int ice_dev_reset(struct rte_eth_dev *dev);
 static int ice_dev_info_get(struct rte_eth_dev *dev,
 			    struct rte_eth_dev_info *dev_info);
@@ -1753,53 +1753,6 @@ ice_pf_setup(struct ice_pf *pf)
 	return 0;
 }
 
-/* PCIe configuration space setting */
-#define PCI_CFG_SPACE_SIZE          256
-#define PCI_CFG_SPACE_EXP_SIZE      4096
-#define PCI_EXT_CAP_ID(header)      (int)((header) & 0x0000ffff)
-#define PCI_EXT_CAP_NEXT(header)    (((header) >> 20) & 0xffc)
-#define PCI_EXT_CAP_ID_DSN          0x03
-
-static int
-ice_pci_find_next_ext_capability(struct rte_pci_device *dev, int cap)
-{
-	uint32_t header;
-	int ttl;
-	int pos = PCI_CFG_SPACE_SIZE;
-
-	/* minimum 8 bytes per capability */
-	ttl = (PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE) / 8;
-
-	if (rte_pci_read_config(dev, &header, 4, pos) < 0) {
-		PMD_INIT_LOG(ERR, "ice error reading extended capabilities\n");
-		return -1;
-	}
-
-	/*
-	 * If we have no capabilities, this is indicated by cap ID,
-	 * cap version and next pointer all being 0.
-	 */
-	if (header == 0)
-		return 0;
-
-	while (ttl-- > 0) {
-		if (PCI_EXT_CAP_ID(header) == cap)
-			return pos;
-
-		pos = PCI_EXT_CAP_NEXT(header);
-
-		if (pos < PCI_CFG_SPACE_SIZE)
-			break;
-
-		if (rte_pci_read_config(dev, &header, 4, pos) < 0) {
-			PMD_INIT_LOG(ERR, "ice error reading extended capabilities\n");
-			return -1;
-		}
-	}
-
-	return 0;
-}
-
 /*
  * Extract device serial number from PCIe Configuration Space and
  * determine the pkg file path according to the DSN.
@@ -1807,12 +1760,12 @@ ice_pci_find_next_ext_capability(struct rte_pci_device *dev, int cap)
 static int
 ice_pkg_file_search_path(struct rte_pci_device *pci_dev, char *pkg_file)
 {
-	int pos;
+	off_t pos;
 	char opt_ddp_filename[ICE_MAX_PKG_FILENAME_SIZE];
 	uint32_t dsn_low, dsn_high;
 	memset(opt_ddp_filename, 0, ICE_MAX_PKG_FILENAME_SIZE);
 
-	pos = ice_pci_find_next_ext_capability(pci_dev, PCI_EXT_CAP_ID_DSN);
+	pos = rte_pci_find_ext_capability(pci_dev, RTE_PCI_EXT_CAP_ID_DSN);
 
 	if (pos) {
 		rte_pci_read_config(pci_dev, &dsn_low, 4, pos + 4);
@@ -2245,11 +2198,6 @@ ice_dev_init(struct rte_eth_dev *dev)
 		goto err_init_mac;
 	}
 
-	/* Pass the information to the rte_eth_dev_close() that it should also
-	 * release the private port resources.
-	 */
-	dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
-
 	ret = ice_res_pool_init(&pf->msix_pool, 1,
 				hw->func_caps.common_cap.num_msix_vectors - 1);
 	if (ret) {
@@ -2430,7 +2378,7 @@ ice_dev_stop(struct rte_eth_dev *dev)
 	pf->adapter_stopped = true;
 }
 
-static void
+static int
 ice_dev_close(struct rte_eth_dev *dev)
 {
 	struct ice_pf *pf = ICE_DEV_PRIVATE_TO_PF(dev->data->dev_private);
@@ -2439,6 +2387,9 @@ ice_dev_close(struct rte_eth_dev *dev)
 	struct rte_intr_handle *intr_handle = &pci_dev->intr_handle;
 	struct ice_adapter *ad =
 		ICE_DEV_PRIVATE_TO_ADAPTER(dev->data->dev_private);
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	/* Since stop will make link down, then the link event will be
 	 * triggered, disable the irq firstly to avoid the port_infoe etc
@@ -2469,15 +2420,14 @@ ice_dev_close(struct rte_eth_dev *dev)
 	dev->rx_pkt_burst = NULL;
 	dev->tx_pkt_burst = NULL;
 
-	rte_free(dev->data->mac_addrs);
-	dev->data->mac_addrs = NULL;
-
 	/* disable uio intr before callback unregister */
 	rte_intr_disable(intr_handle);
 
 	/* unregister callback func from eal lib */
 	rte_intr_callback_unregister(intr_handle,
 				     ice_interrupt_handler, dev);
+
+	return 0;
 }
 
 static int

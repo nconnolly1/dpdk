@@ -1550,10 +1550,13 @@ lio_dev_set_link_down(struct rte_eth_dev *eth_dev)
  * @return
  *    - nothing
  */
-static void
+static int
 lio_dev_close(struct rte_eth_dev *eth_dev)
 {
 	struct lio_device *lio_dev = LIO_DEV(eth_dev);
+
+	if (rte_eal_process_type() != RTE_PROC_PRIMARY)
+		return 0;
 
 	lio_dev_info(lio_dev, "closing port %d\n", eth_dev->data->port_id);
 
@@ -1581,6 +1584,8 @@ lio_dev_close(struct rte_eth_dev *eth_dev)
 
 	 /* Delete all queues */
 	lio_dev_clear_queues(eth_dev);
+
+	return 0;
 }
 
 /**

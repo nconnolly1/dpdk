@@ -594,7 +594,7 @@ bnxt_ulp_global_cfg_update(struct bnxt *bp,
 {
 	uint32_t global_cfg = 0;
 	int rc;
-	struct tf_global_cfg_parms parms;
+	struct tf_global_cfg_parms parms = { 0 };
 
 	/* Initialize the params */
 	parms.dir = dir,
@@ -646,9 +646,9 @@ static void
 bnxt_ulp_destroy_vfr_default_rules(struct bnxt *bp, bool global)
 {
 	struct bnxt_ulp_vfr_rule_info *info;
-	uint8_t port_id;
+	uint16_t port_id;
 	struct rte_eth_dev *vfr_eth_dev;
-	struct bnxt_vf_representor *vfr_bp;
+	struct bnxt_representor *vfr_bp;
 
 	if (!BNXT_TRUFLOW_EN(bp) || BNXT_ETH_DEV_IS_REPRESENTOR(bp->eth_dev))
 		return;
@@ -1139,7 +1139,7 @@ bnxt_ulp_eth_dev_ptr2_cntxt_get(struct rte_eth_dev	*dev)
 	struct bnxt *bp = (struct bnxt *)dev->data->dev_private;
 
 	if (BNXT_ETH_DEV_IS_REPRESENTOR(dev)) {
-		struct bnxt_vf_representor *vfr = dev->data->dev_private;
+		struct bnxt_representor *vfr = dev->data->dev_private;
 
 		bp = vfr->parent_dev->data->dev_private;
 	}

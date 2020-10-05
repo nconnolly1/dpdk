@@ -55,12 +55,30 @@ New Features
      Also, make sure to start the actual text at the margin.
      =======================================================
 
+* **Updated Broadcom bnxt driver.**
+
+  Updated the Broadcom bnxt driver with new features and improvements, including:
+
+  * Added support for 200G PAM4 link speed.
+
 * **Updated Cisco enic driver.**
 
   * Added support for VF representors with single-queue Tx/Rx and flow API
   * Added support for egress PORT_ID action
   * Added support for non-zero priorities for group 0 flows
   * Added support for VXLAN decap combined with VLAN pop
+
+* **Updated Solarflare network PMD.**
+
+  Updated the Solarflare ``sfc_efx`` driver with changes including:
+
+  * Added SR-IOV PF support
+
+* **Updated Virtio driver.**
+
+  * Added support for Vhost-vDPA backend to Virtio-user PMD.
+  * Changed default link speed to unknown.
+  * Added support for 200G link speed.
 
 * **Extended flow-perf application.**
 
@@ -78,6 +96,17 @@ New Features
     ``--portmask=N``
     where N represents the hexadecimal bitmask of ports used.
 
+* **Updated the pipeline library for alignment with the P4 language.**
+
+  Added new Software Switch (SWX) pipeline type that provides more
+  flexibility through API and feature alignment with the P4 language.
+
+  * The packet headers, meta-data, actions, tables and pipelines are
+    dynamically defined instead of selected from pre-defined set.
+  * The actions and the pipeline are defined with instructions.
+  * Extern objects and functions can be plugged into the pipeline.
+  * Transaction-oriented table updates.
+
 
 Removed Items
 -------------
@@ -90,6 +119,10 @@ Removed Items
    This section is a comment. Do not overwrite or remove it.
    Also, make sure to start the actual text at the margin.
    =======================================================
+
+* vhost: Dequeue zero-copy support has been removed.
+
+* Removed Python 2 support since it was EOL'd in January 2020.
 
 
 API Changes
@@ -161,6 +194,8 @@ API Changes
   * ``_rte_eth_dev_callback_process()`` -> ``rte_eth_dev_callback_process()``
   * ``_rte_eth_dev_reset`` -> ``rte_eth_dev_internal_reset()``
 
+* vhost: Moved vDPA APIs from experimental to stable.
+
 * rawdev: Added a structure size parameter to the functions
   ``rte_rawdev_queue_setup()``, ``rte_rawdev_queue_conf_get()``,
   ``rte_rawdev_info_get()`` and ``rte_rawdev_configure()``,
@@ -169,6 +204,9 @@ API Changes
 * rawdev: Changed the return type of the function ``rte_dev_info_get()``
   and the function ``rte_rawdev_queue_conf_get()``
   from ``void`` to ``int`` allowing the return of error codes from drivers.
+
+* stack: the experimental tag has been dropped from the stack library, and its
+  interfaces are considered stable as of DPDK 20.11.
 
 * bpf: ``RTE_BPF_XTYPE_NUM`` has been dropped from ``rte_bpf_xtype``.
 

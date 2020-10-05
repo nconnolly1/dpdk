@@ -1218,7 +1218,7 @@ memif_dev_start(struct rte_eth_dev *dev)
 	return ret;
 }
 
-static void
+static int
 memif_dev_close(struct rte_eth_dev *dev)
 {
 	struct pmd_internals *pmd = dev->data->dev_private;
@@ -1239,6 +1239,8 @@ memif_dev_close(struct rte_eth_dev *dev)
 	}
 
 	rte_free(dev->process_private);
+
+	return 0;
 }
 
 static int
@@ -1524,9 +1526,6 @@ memif_create(struct rte_vdev_device *vdev, enum memif_role_t role,
 		eth_dev->rx_pkt_burst = eth_memif_rx;
 		eth_dev->tx_pkt_burst = eth_memif_tx;
 	}
-
-
-	eth_dev->data->dev_flags |= RTE_ETH_DEV_CLOSE_REMOVE;
 
 	rte_eth_dev_probing_finish(eth_dev);
 

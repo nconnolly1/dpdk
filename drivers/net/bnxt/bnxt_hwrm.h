@@ -48,6 +48,13 @@ struct hwrm_func_qstats_output;
 #define HWRM_FUNC_RESOURCE_QCAPS_OUTPUT_VF_RESV_STRATEGY_MAXIMAL \
 	HWRM_FUNC_RESOURCE_QCAPS_OUTPUT_VF_RESERVATION_STRATEGY_MAXIMAL
 
+#define HWRM_PORT_PHY_CFG_IN_EN_FORCE_PAM4_LINK_SPEED \
+	HWRM_PORT_PHY_CFG_INPUT_ENABLES_FORCE_PAM4_LINK_SPEED
+#define HWRM_PORT_PHY_CFG_IN_EN_AUTO_PAM4_LINK_SPD_MASK \
+	HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_PAM4_LINK_SPEED_MASK
+#define HWRM_PORT_PHY_CFG_IN_EN_AUTO_LINK_SPEED_MASK \
+	HWRM_PORT_PHY_CFG_INPUT_ENABLES_AUTO_LINK_SPEED_MASK
+
 #define HWRM_CFA_ADV_FLOW_MGNT_QCAPS_L2_HDR_SRC_FILTER_EN \
 HWRM_CFA_ADV_FLOW_MGNT_QCAPS_OUTPUT_FLAGS_L2_HEADER_SOURCE_FIELDS_SUPPORTED
 
@@ -283,4 +290,8 @@ int bnxt_clear_one_vnic_filter(struct bnxt *bp,
 int bnxt_hwrm_cfa_vfr_alloc(struct bnxt *bp, uint16_t vf_idx);
 int bnxt_hwrm_cfa_vfr_free(struct bnxt *bp, uint16_t vf_idx);
 void bnxt_hwrm_free_vf_info(struct bnxt *bp);
+int bnxt_hwrm_first_vf_id_query(struct bnxt *bp, uint16_t fid,
+				uint16_t *first_vf_id);
+int bnxt_hwrm_cfa_pair_alloc(struct bnxt *bp, struct bnxt_representor *rep);
+int bnxt_hwrm_cfa_pair_free(struct bnxt *bp, struct bnxt_representor *rep);
 #endif
