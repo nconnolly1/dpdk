@@ -29,7 +29,7 @@ T: git://dpdk.org/dpdk
 
 Next-net Tree
 M: Ferruh Yigit <ferruh.yigit@intel.com>
-M: Andrew Rybchenko <arybchenko@solarflare.com>
+M: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
 T: git://dpdk.org/next/dpdk-next-net
 
 Next-net-brcm Tree
@@ -237,8 +237,8 @@ M: Cristian Dumitrescu <cristian.dumitrescu@intel.com>
 F: lib/librte_eal/include/rte_bitmap.h
 F: app/test/test_bitmap.c
 
-MCSlock - EXPERIMENTAL
-M: Phil Yang <phil.yang@arm.com>
+MCSlock
+M: Honnappa Nagarahalli <honnappa.nagarahalli@arm.com>
 F: lib/librte_eal/include/generic/rte_mcslock.h
 F: app/test/test_mcslock.c
 
@@ -290,7 +290,6 @@ F: doc/guides/linux_gsg/
 
 Linux UIO
 M: Ferruh Yigit <ferruh.yigit@intel.com>
-F: kernel/linux/igb_uio/
 F: drivers/bus/pci/linux/*uio*
 
 Linux VFIO
@@ -333,7 +332,7 @@ T: git://dpdk.org/dpdk
 
 Memory pool
 M: Olivier Matz <olivier.matz@6wind.com>
-M: Andrew Rybchenko <arybchenko@solarflare.com>
+M: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
 F: lib/librte_mempool/
 F: drivers/mempool/ring/
 F: doc/guides/prog_guide/mempool_lib.rst
@@ -365,7 +364,7 @@ F: app/test/test_mbuf.c
 Ethernet API
 M: Thomas Monjalon <thomas@monjalon.net>
 M: Ferruh Yigit <ferruh.yigit@intel.com>
-M: Andrew Rybchenko <arybchenko@solarflare.com>
+M: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
 T: git://dpdk.org/next/dpdk-next-net
 F: lib/librte_ethdev/
 F: app/test/test_ethdev*
@@ -483,7 +482,7 @@ Memory Pool Drivers
 
 Bucket memory pool
 M: Artem V. Andreev <artem.andreev@oktetlabs.ru>
-M: Andrew Rybchenko <arybchenko@solarflare.com>
+M: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
 F: drivers/mempool/bucket/
 
 Marvell OCTEON TX2
@@ -852,7 +851,7 @@ F: doc/guides/nics/qede.rst
 F: doc/guides/nics/features/qede*.ini
 
 Solarflare sfc_efx
-M: Andrew Rybchenko <arybchenko@solarflare.com>
+M: Andrew Rybchenko <andrew.rybchenko@oktetlabs.ru>
 F: drivers/common/sfc_efx/
 F: drivers/net/sfc/
 F: doc/guides/nics/sfc_efx.rst
@@ -1421,7 +1420,7 @@ M: Olivier Matz <olivier.matz@6wind.com>
 F: lib/librte_kvargs/
 F: app/test/test_kvargs.c
 
-RCU - EXPERIMENTAL
+RCU
 M: Honnappa Nagarahalli <honnappa.nagarahalli@arm.com>
 F: lib/librte_rcu/
 F: app/test/test_rcu*
@@ -1564,46 +1563,57 @@ F: doc/guides/tools/proc_info.rst
 Other Example Applications
 --------------------------
 
+Ethtool example
 F: examples/ethtool/
 F: doc/guides/sample_app_ug/ethtool.rst
 
+FIPS validation example
 M: Marko Kovacevic <marko.kovacevic@intel.com>
 F: examples/fips_validation/
 F: doc/guides/sample_app_ug/fips_validation.rst
 
+Flow filtering example
 M: Ori Kam <orika@nvidia.com>
 F: examples/flow_filtering/
 F: doc/guides/sample_app_ug/flow_filtering.rst
 
+Helloworld example
 M: Bruce Richardson <bruce.richardson@intel.com>
 F: examples/helloworld/
 F: doc/guides/sample_app_ug/hello_world.rst
 
+IPsec security gateway example
 M: Radu Nicolau <radu.nicolau@intel.com>
 M: Akhil Goyal <akhil.goyal@nxp.com>
 F: examples/ipsec-secgw/
 F: doc/guides/sample_app_ug/ipsec_secgw.rst
 
+IPv4 multicast example
 F: examples/ipv4_multicast/
 F: doc/guides/sample_app_ug/ipv4_multicast.rst
 
+L2 forwarding example
 M: Bruce Richardson <bruce.richardson@intel.com>
 F: examples/l2fwd/
 F: doc/guides/sample_app_ug/l2_forward_real_virtual.rst
 
+L2 forwarding with cache allocation example
 M: Tomasz Kantecki <tomasz.kantecki@intel.com>
 F: doc/guides/sample_app_ug/l2_forward_cat.rst
 F: examples/l2fwd-cat/
 
+L2 forwarding with eventdev example
 M: Sunil Kumar Kori <skori@marvell.com>
 M: Pavan Nikhilesh <pbhagavatula@marvell.com>
 T: git://dpdk.org/next/dpdk-next-eventdev
 F: examples/l2fwd-event/
 F: doc/guides/sample_app_ug/l2_forward_event.rst
 
+L3 forwarding example
 F: examples/l3fwd/
 F: doc/guides/sample_app_ug/l3_forward.rst
 
+Link status interrupt example
 F: examples/link_status_interrupt/
 F: doc/guides/sample_app_ug/link_status_intr.rst
 
@@ -1612,26 +1622,32 @@ M: John McNamara <john.mcnamara@intel.com>
 F: examples/performance-thread/
 F: doc/guides/sample_app_ug/performance_thread.rst
 
+PTP client example
 M: Kirill Rybalchenko <kirill.rybalchenko@intel.com>
 F: examples/ptpclient/
 
+Rx/Tx callbacks example
 M: Bruce Richardson <bruce.richardson@intel.com>
 M: John McNamara <john.mcnamara@intel.com>
 F: examples/rxtx_callbacks/
 F: doc/guides/sample_app_ug/rxtx_callbacks.rst
 
+Service cores example
 M: Harry van Haaren <harry.van.haaren@intel.com>
 F: examples/service_cores/
 F: doc/guides/sample_app_ug/service_cores.rst
 
+Skeleton example
 M: Bruce Richardson <bruce.richardson@intel.com>
 M: John McNamara <john.mcnamara@intel.com>
 F: examples/skeleton/
 F: doc/guides/sample_app_ug/skeleton.rst
 
+TEP termination example
 M: Xiaoyun Li <xiaoyun.li@intel.com>
 F: examples/tep_termination/
 
+VMDq examples
 F: examples/vmdq/
 F: doc/guides/sample_app_ug/vmdq_forwarding.rst
 F: examples/vmdq_dcb/

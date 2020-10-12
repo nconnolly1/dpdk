@@ -2166,10 +2166,7 @@ void
 rte_eth_tx_buffer_drop_callback(struct rte_mbuf **pkts, uint16_t unsent,
 		void *userdata __rte_unused)
 {
-	unsigned i;
-
-	for (i = 0; i < unsent; i++)
-		rte_pktmbuf_free(pkts[i]);
+	rte_pktmbuf_free_bulk(pkts, unsent);
 }
 
 void
@@ -2177,11 +2174,8 @@ rte_eth_tx_buffer_count_callback(struct rte_mbuf **pkts, uint16_t unsent,
 		void *userdata)
 {
 	uint64_t *count = userdata;
-	unsigned i;
 
-	for (i = 0; i < unsent; i++)
-		rte_pktmbuf_free(pkts[i]);
-
+	rte_pktmbuf_free_bulk(pkts, unsent);
 	*count += unsent;
 }
 
@@ -3666,6 +3660,50 @@ rte_eth_led_off(uint16_t port_id)
 	return eth_err(port_id, (*dev->dev_ops->dev_led_off)(dev));
 }
 
+int
+rte_eth_fec_get_capability(uint16_t port_id,
+			   struct rte_eth_fec_capa *speed_fec_capa,
+			   unsigned int num)
+{
+	struct rte_eth_dev *dev;
+	int ret;
+
+	if (speed_fec_capa == NULL && num > 0)
+		return -EINVAL;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+	dev = &rte_eth_devices[port_id];
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->fec_get_capability, -ENOTSUP);
+	ret = (*dev->dev_ops->fec_get_capability)(dev, speed_fec_capa, num);
+
+	return ret;
+}
+
+int
+rte_eth_fec_get(uint16_t port_id, uint32_t *fec_capa)
+{
+	struct rte_eth_dev *dev;
+
+	if (fec_capa == NULL)
+		return -EINVAL;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+	dev = &rte_eth_devices[port_id];
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->fec_get, -ENOTSUP);
+	return eth_err(port_id, (*dev->dev_ops->fec_get)(dev, fec_capa));
+}
+
+int
+rte_eth_fec_set(uint16_t port_id, uint32_t fec_capa)
+{
+	struct rte_eth_dev *dev;
+
+	RTE_ETH_VALID_PORTID_OR_ERR_RET(port_id, -ENODEV);
+	dev = &rte_eth_devices[port_id];
+	RTE_FUNC_PTR_OR_ERR_RET(*dev->dev_ops->fec_set, -ENOTSUP);
+	return eth_err(port_id, (*dev->dev_ops->fec_set)(dev, fec_capa));
+}
+
 /*
  * Returns index into MAC address array of addr. Use 00:00:00:00:00:00 to find
  * an empty spot.
@@ -4694,7 +4732,8 @@ rte_eth_rx_queue_info_get(uint16_t port_id, uint16_t queue_id,
 		return -EINVAL;
 	}
 
-	if (dev->data->rx_queues[queue_id] == NULL) {
+	if (dev->data->rx_queues == NULL ||
+			dev->data->rx_queues[queue_id] == NULL) {
 		RTE_ETHDEV_LOG(ERR,
 			       "Rx queue %"PRIu16" of device with port_id=%"
 			       PRIu16" has not been setup\n",
@@ -4733,7 +4772,8 @@ rte_eth_tx_queue_info_get(uint16_t port_id, uint16_t queue_id,
 		return -EINVAL;
 	}
 
-	if (dev->data->tx_queues[queue_id] == NULL) {
+	if (dev->data->tx_queues == NULL ||
+			dev->data->tx_queues[queue_id] == NULL) {
 		RTE_ETHDEV_LOG(ERR,
 			       "Tx queue %"PRIu16" of device with port_id=%"
 			       PRIu16" has not been setup\n",
@@ -5315,6 +5355,57 @@ handle_port_list(const char *cmd __rte_unused,
 	return 0;
 }
 
+static void
+add_port_queue_stats(struct rte_tel_data *d, uint64_t *q_stats,
+		const char *stat_name)
+{
+	int q;
+	struct rte_tel_data *q_data = rte_tel_data_alloc();
+	rte_tel_data_start_array(q_data, RTE_TEL_U64_VAL);
+	for (q = 0; q < RTE_ETHDEV_QUEUE_STAT_CNTRS; q++)
+		rte_tel_data_add_array_u64(q_data, q_stats[q]);
+	rte_tel_data_add_dict_container(d, stat_name, q_data, 0);
+}
+
+#define ADD_DICT_STAT(stats, s) rte_tel_data_add_dict_u64(d, #s, stats.s)
+
+static int
+handle_port_stats(const char *cmd __rte_unused,
+		const char *params,
+		struct rte_tel_data *d)
+{
+	struct rte_eth_stats stats;
+	int port_id, ret;
+
+	if (params == NULL || strlen(params) == 0 || !isdigit(*params))
+		return -1;
+
+	port_id = atoi(params);
+	if (!rte_eth_dev_is_valid_port(port_id))
+		return -1;
+
+	ret = rte_eth_stats_get(port_id, &stats);
+	if (ret < 0)
+		return -1;
+
+	rte_tel_data_start_dict(d);
+	ADD_DICT_STAT(stats, ipackets);
+	ADD_DICT_STAT(stats, opackets);
+	ADD_DICT_STAT(stats, ibytes);
+	ADD_DICT_STAT(stats, obytes);
+	ADD_DICT_STAT(stats, imissed);
+	ADD_DICT_STAT(stats, ierrors);
+	ADD_DICT_STAT(stats, oerrors);
+	ADD_DICT_STAT(stats, rx_nombuf);
+	add_port_queue_stats(d, stats.q_ipackets, "q_ipackets");
+	add_port_queue_stats(d, stats.q_opackets, "q_opackets");
+	add_port_queue_stats(d, stats.q_ibytes, "q_ibytes");
+	add_port_queue_stats(d, stats.q_obytes, "q_obytes");
+	add_port_queue_stats(d, stats.q_errors, "q_errors");
+
+	return 0;
+}
+
 static int
 handle_port_xstats(const char *cmd __rte_unused,
 		const char *params,
@@ -5324,11 +5415,15 @@ handle_port_xstats(const char *cmd __rte_unused,
 	struct rte_eth_xstat_name *xstat_names;
 	int port_id, num_xstats;
 	int i, ret;
+	char *end_param;
 
 	if (params == NULL || strlen(params) == 0 || !isdigit(*params))
 		return -1;
 
-	port_id = atoi(params);
+	port_id = strtoul(params, &end_param, 0);
+	if (*end_param != '\0')
+		RTE_ETHDEV_LOG(NOTICE,
+			"Extra parameters passed to ethdev telemetry command, ignoring");
 	if (!rte_eth_dev_is_valid_port(port_id))
 		return -1;
 
@@ -5370,11 +5465,15 @@ handle_port_link_status(const char *cmd __rte_unused,
 	static const char *status_str = "status";
 	int ret, port_id;
 	struct rte_eth_link link;
+	char *end_param;
 
 	if (params == NULL || strlen(params) == 0 || !isdigit(*params))
 		return -1;
 
-	port_id = atoi(params);
+	port_id = strtoul(params, &end_param, 0);
+	if (*end_param != '\0')
+		RTE_ETHDEV_LOG(NOTICE,
+			"Extra parameters passed to ethdev telemetry command, ignoring");
 	if (!rte_eth_dev_is_valid_port(port_id))
 		return -1;
 
@@ -5401,6 +5500,8 @@ RTE_INIT(ethdev_init_telemetry)
 {
 	rte_telemetry_register_cmd("/ethdev/list", handle_port_list,
 			"Returns list of available ethdev ports. Takes no parameters");
+	rte_telemetry_register_cmd("/ethdev/stats", handle_port_stats,
+			"Returns the common stats for a port. Parameters: int port_id");
 	rte_telemetry_register_cmd("/ethdev/xstats", handle_port_xstats,
 			"Returns the extended stats for a port. Parameters: int port_id");
 	rte_telemetry_register_cmd("/ethdev/link_status",

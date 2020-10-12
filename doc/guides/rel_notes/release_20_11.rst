@@ -55,11 +55,18 @@ New Features
      Also, make sure to start the actual text at the margin.
      =======================================================
 
+* **Added the FEC API, for a generic FEC query and config.**
+
+  Added the FEC API which provides functions for query FEC capabilities and
+  current FEC mode from device. Also, API for configuring FEC mode is also provided.
+
 * **Updated Broadcom bnxt driver.**
 
   Updated the Broadcom bnxt driver with new features and improvements, including:
 
   * Added support for 200G PAM4 link speed.
+  * Added support for RSS hash level selection.
+  * Updated HWRM structures to 1.10.1.70 version.
 
 * **Updated Cisco enic driver.**
 
@@ -67,6 +74,11 @@ New Features
   * Added support for egress PORT_ID action
   * Added support for non-zero priorities for group 0 flows
   * Added support for VXLAN decap combined with VLAN pop
+
+* **Added hns3 FEC PMD, for supporting query and config FEC mode.**
+
+  Added the FEC PMD which provides functions for query FEC capabilities and
+  current FEC mode from device. Also, PMD for configuring FEC mode is also provided.
 
 * **Updated Solarflare network PMD.**
 
@@ -79,6 +91,15 @@ New Features
   * Added support for Vhost-vDPA backend to Virtio-user PMD.
   * Changed default link speed to unknown.
   * Added support for 200G link speed.
+
+* **Added Ice Lake (Gen4) support for Intel NTB.**
+
+  Added NTB device support (4th generation) for Intel Ice Lake platform.
+
+* **Added UDP/IPv4 GRO support for VxLAN and non-VxLAN packets.**
+
+  For VxLAN packets, added inner UDP/IPv4 support.
+  For non-VxLAN packets, added UDP/IPv4 support.
 
 * **Extended flow-perf application.**
 
@@ -95,6 +116,26 @@ New Features
   * Added option to set port mask for insertion/deletion:
     ``--portmask=N``
     where N represents the hexadecimal bitmask of ports used.
+
+* **Updated ioat rawdev driver**
+
+  The ioat rawdev driver has been updated and enhanced. Changes include:
+
+  * Added support for Intel\ |reg| Data Streaming Accelerator hardware.
+    For more information, see https://01.org/blogs/2019/introducing-intel-data-streaming-accelerator
+  * Added support for the fill operation via the API ``rte_ioat_enqueue_fill()``,
+    where the hardware fills an area of memory with a repeating pattern.
+  * Added a per-device configuration flag to disable management
+    of user-provided completion handles.
+  * Renamed the ``rte_ioat_do_copies()`` API to ``rte_ioat_perform_ops()``,
+    and renamed the ``rte_ioat_completed_copies()`` API to ``rte_ioat_completed_ops()``
+    to better reflect the APIs' purposes, and remove the implication that
+    they are limited to copy operations only.
+    [Note: The old API is still provided but marked as deprecated in the code]
+  * Added a new API ``rte_ioat_fence()`` to add a fence between operations.
+    This API replaces the ``fence`` flag parameter in the ``rte_ioat_enqueue_copies()`` function,
+    and is clearer as there is no ambiguity as to whether the flag should be
+    set on the last operation before the fence or the first operation after it.
 
 * **Updated the pipeline library for alignment with the P4 language.**
 
@@ -122,8 +163,10 @@ Removed Items
 
 * vhost: Dequeue zero-copy support has been removed.
 
-* Removed Python 2 support since it was EOL'd in January 2020.
+* kernel: The module ``igb_uio`` has been moved to the git repository
+  ``dpdk-kmods`` in a new directory ``linux/igb_uio``.
 
+* Removed Python 2 support since it was EOL'd in January 2020.
 
 API Changes
 -----------
@@ -194,6 +237,11 @@ API Changes
   * ``_rte_eth_dev_callback_process()`` -> ``rte_eth_dev_callback_process()``
   * ``_rte_eth_dev_reset`` -> ``rte_eth_dev_internal_reset()``
 
+* ethdev: Modified field type of ``base`` and ``nb_queue`` in struct
+  ``rte_eth_dcb_tc_queue_mapping`` from ``uint8_t`` to ``uint16_t``.
+  As the data of ``uint8_t`` will be truncated when queue number under
+  a TC is greater than 256.
+
 * vhost: Moved vDPA APIs from experimental to stable.
 
 * rawdev: Added a structure size parameter to the functions
@@ -204,6 +252,17 @@ API Changes
 * rawdev: Changed the return type of the function ``rte_dev_info_get()``
   and the function ``rte_rawdev_queue_conf_get()``
   from ``void`` to ``int`` allowing the return of error codes from drivers.
+
+* rawdev: The running of a drivers ``selftest()`` function can now be done
+  using the ``rawdev_autotest`` command in the ``dpdk-test`` binary. This
+  command now calls the self-test function for each rawdev found on the
+  system, and does not require a specific command per device type.
+  Following this change, the ``ioat_rawdev_autotest`` command has been
+  removed as no longer needed.
+
+* raw/ioat: As noted above, the ``rte_ioat_do_copies()`` and
+  ``rte_ioat_completed_copies()`` functions have been renamed to
+  ``rte_ioat_perform_ops()`` and ``rte_ioat_completed_ops()`` respectively.
 
 * stack: the experimental tag has been dropped from the stack library, and its
   interfaces are considered stable as of DPDK 20.11.
