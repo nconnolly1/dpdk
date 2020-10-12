@@ -49,6 +49,7 @@ foreach app:apps
 				 + '_rte_' + d)
 		endforeach
 		dep_objs += lib_execinfo
+		dep_objs += get_variable('eal_' + get_option('default_library') + '_deps')
 
 		link_libs = []
 		if get_option('default_library') == 'static'

@@ -99,6 +99,8 @@ foreach subpath:subdirs
 					static_deps += [get_variable('static_rte_' + d)]
 				endif
 			endforeach
+			shared_deps += eal_shared_deps
+			static_deps += eal_static_deps
 		endif
 
 		if not build
