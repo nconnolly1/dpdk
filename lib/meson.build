@@ -143,7 +143,6 @@ foreach l:libraries
 			endif
 			version_map = '@0@/@1@/rte_@2@_version.map'.format(
 					meson.current_source_dir(), dir_name, name)
-			implib = dir_name + '.dll.a'
 
 			def_file = custom_target(libname + '_def',
 				command: [map_to_win_cmd, '@INPUT@', '@OUTPUT@'],
@@ -156,8 +155,7 @@ foreach l:libraries
 				output: '@0@_mingw.map'.format(libname))
 
 			if is_ms_linker
-				lk_args = ['-Wl,/def:' + def_file.full_path(),
-					'-Wl,/implib:lib\\' + implib]
+				lk_args = ['-Wl,/def:' + def_file.full_path()]
 			else
 				if is_windows
 					lk_args = ['-Wl,--version-script=' + mingw_map.full_path()]

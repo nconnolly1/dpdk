@@ -155,7 +155,6 @@ foreach subpath:subdirs
 			version_map = '@0@/@1@/@2@_version.map'.format(
 					meson.current_source_dir(),
 					drv_path, lib_name)
-			implib = 'lib' + lib_name + '.dll.a'
 
 			def_file = custom_target(lib_name + '_def',
 				command: [map_to_win_cmd, '@INPUT@', '@OUTPUT@'],
@@ -170,8 +169,7 @@ foreach subpath:subdirs
 			lk_deps = [version_map, def_file, mingw_map]
 			if is_windows
 				if is_ms_linker
-					lk_args = ['-Wl,/def:' + def_file.full_path(),
-						'-Wl,/implib:drivers\\' + implib]
+					lk_args = ['-Wl,/def:' + def_file.full_path()]
 				else
 					lk_args = ['-Wl,--version-script=' + mingw_map.full_path()]
 				endif
