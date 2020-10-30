@@ -480,7 +480,7 @@ cmd_pipeline_create(char **tokens,
 static const char cmd_pipeline_port_in_help[] =
 "pipeline <pipeline_name> port in <port_id>\n"
 "   link <link_name> rxq <queue_id> bsz <burst_size>\n"
-"   source <mempool_name> <fie_name>\n";
+"   | source <mempool_name> <file_name>\n";
 
 static void
 cmd_pipeline_port_in(char **tokens,
@@ -779,6 +779,18 @@ cmd_pipeline_build(char **tokens,
 	}
 }
 
+static void
+table_entry_free(struct rte_swx_table_entry *entry)
+{
+	if (!entry)
+		return;
+
+	free(entry->key);
+	free(entry->key_mask);
+	free(entry->action_data);
+	free(entry);
+}
+
 static const char cmd_pipeline_table_update_help[] =
 "pipeline <pipeline_name> table <table_name> update <file_name_add> "
 "<file_name_delete> <file_name_default>";
@@ -866,7 +878,7 @@ cmd_pipeline_table_update(char **tokens,
 	}
 
 	/* Add. */
-	if (file_add) {
+	if (file_add)
 		for (line_id = 1; ; line_id++) {
 			struct rte_swx_table_entry *entry;
 
@@ -885,6 +897,7 @@ cmd_pipeline_table_update(char **tokens,
 			status = rte_swx_ctl_pipeline_table_entry_add(p->ctl,
 				table_name,
 				entry);
+			table_entry_free(entry);
 			if (status) {
 				snprintf(out, out_size,
 					"Invalid entry in file %s at line %u",
@@ -893,11 +906,9 @@ cmd_pipeline_table_update(char **tokens,
 			}
 		}
 
-		fclose(file_add);
-	}
 
 	/* Delete. */
-	if (file_delete) {
+	if (file_delete)
 		for (line_id = 1; ; line_id++) {
 			struct rte_swx_table_entry *entry;
 
@@ -916,6 +927,7 @@ cmd_pipeline_table_update(char **tokens,
 			status = rte_swx_ctl_pipeline_table_entry_delete(p->ctl,
 				table_name,
 				entry);
+			table_entry_free(entry);
 			if (status)  {
 				snprintf(out, out_size,
 					"Invalid entry in file %s at line %u",
@@ -924,11 +936,8 @@ cmd_pipeline_table_update(char **tokens,
 			}
 		}
 
-		fclose(file_delete);
-	}
-
 	/* Default. */
-	if (file_default) {
+	if (file_default)
 		for (line_id = 1; ; line_id++) {
 			struct rte_swx_table_entry *entry;
 
@@ -947,6 +956,7 @@ cmd_pipeline_table_update(char **tokens,
 			status = rte_swx_ctl_pipeline_table_default_entry_add(p->ctl,
 				table_name,
 				entry);
+			table_entry_free(entry);
 			if (status) {
 				snprintf(out, out_size,
 					"Invalid entry in file %s at line %u",
@@ -955,19 +965,22 @@ cmd_pipeline_table_update(char **tokens,
 			}
 		}
 
-		fclose(file_default);
-	}
-
 	status = rte_swx_ctl_pipeline_commit(p->ctl, 1);
 	if (status) {
 		snprintf(out, out_size, "Commit failed.");
 		goto error;
 	}
 
-	free(line);
 
 	rte_swx_ctl_pipeline_table_fprintf(stdout, p->ctl, table_name);
 
+	free(line);
+	if (file_add)
+		fclose(file_add);
+	if (file_delete)
+		fclose(file_delete);
+	if (file_default)
+		fclose(file_default);
 	return;
 
 error:
@@ -1165,7 +1178,18 @@ cmd_help(char **tokens,
 
 	if (n_tokens == 0) {
 		snprintf(out, out_size,
-			"Type 'help <command>' for command details.\n\n");
+			"Type 'help <command>' for command details.\n\n"
+			"List of commands:\n"
+			"\tmempool\n"
+			"\tlink\n"
+			"\tpipeline create\n"
+			"\tpipeline port in\n"
+			"\tpipeline port out\n"
+			"\tpipeline build\n"
+			"\tpipeline table update\n"
+			"\tpipeline stats\n"
+			"\tthread pipeline enable\n"
+			"\tthread pipeline disable\n\n");
 		return;
 	}
 
@@ -1180,20 +1204,20 @@ cmd_help(char **tokens,
 	}
 
 	if ((strcmp(tokens[0], "pipeline") == 0) &&
-		((n_tokens == 1) && (strcmp(tokens[2], "create")) == 0)) {
+		(n_tokens == 2) && (strcmp(tokens[1], "create") == 0)) {
 		snprintf(out, out_size, "\n%s\n", cmd_pipeline_create_help);
 		return;
 	}
 
 	if ((strcmp(tokens[0], "pipeline") == 0) &&
-		(strcmp(tokens[1], "port") == 0)) {
-		if ((n_tokens == 3) && (strcmp(tokens[2], "in")) == 0) {
+		(n_tokens == 3) && (strcmp(tokens[1], "port") == 0)) {
+		if (strcmp(tokens[2], "in") == 0) {
 			snprintf(out, out_size, "\n%s\n",
 				cmd_pipeline_port_in_help);
 			return;
 		}
 
-		if ((n_tokens == 3) && (strcmp(tokens[2], "out")) == 0) {
+		if (strcmp(tokens[2], "out") == 0) {
 			snprintf(out, out_size, "\n%s\n",
 				cmd_pipeline_port_out_help);
 			return;
@@ -1201,20 +1225,22 @@ cmd_help(char **tokens,
 	}
 
 	if ((strcmp(tokens[0], "pipeline") == 0) &&
-		((n_tokens >= 2) && (strcmp(tokens[2], "build")) == 0)) {
+		(n_tokens == 2) && (strcmp(tokens[1], "build") == 0)) {
 		snprintf(out, out_size, "\n%s\n", cmd_pipeline_build_help);
 		return;
 	}
 
 	if ((strcmp(tokens[0], "pipeline") == 0) &&
-		((n_tokens >= 2) && (strcmp(tokens[2], "table")) == 0)) {
+		(n_tokens == 3) &&
+		(strcmp(tokens[1], "table") == 0) &&
+		(strcmp(tokens[2], "update") == 0)) {
 		snprintf(out, out_size, "\n%s\n",
 			cmd_pipeline_table_update_help);
 		return;
 	}
 
 	if ((strcmp(tokens[0], "pipeline") == 0) &&
-		((n_tokens >= 2) && (strcmp(tokens[2], "stats")) == 0)) {
+		(n_tokens == 2) && (strcmp(tokens[1], "stats") == 0)) {
 		snprintf(out, out_size, "\n%s\n", cmd_pipeline_stats_help);
 		return;
 	}

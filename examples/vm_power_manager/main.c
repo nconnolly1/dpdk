@@ -31,13 +31,13 @@
 #include "vm_power_cli.h"
 #include "oob_monitor.h"
 #include "parse.h"
-#ifdef RTE_LIBRTE_IXGBE_PMD
+#ifdef RTE_NET_IXGBE
 #include <rte_pmd_ixgbe.h>
 #endif
-#ifdef RTE_LIBRTE_I40E_PMD
+#ifdef RTE_NET_I40E
 #include <rte_pmd_i40e.h>
 #endif
-#ifdef RTE_LIBRTE_BNXT_PMD
+#ifdef RTE_NET_BNXT
 #include <rte_pmd_bnxt.h>
 #endif
 
@@ -206,6 +206,7 @@ parse_args(int argc, char **argv)
 			}
 			if (branch_ratio <= 0.0 || branch_ratio > 100.0) {
 				printf("invalid branch ratio specified\n");
+				free(oob_enable);
 				return -1;
 			}
 			for (i = 0; i < ci->core_count; i++) {
@@ -397,16 +398,16 @@ main(int argc, char **argv)
 				eth.addr_bytes[5] = w + 0xf0;
 
 				ret = -ENOTSUP;
-#ifdef RTE_LIBRTE_IXGBE_PMD
+#ifdef RTE_NET_IXGBE
 				ret = rte_pmd_ixgbe_set_vf_mac_addr(portid,
 							w, &eth);
 #endif
-#ifdef RTE_LIBRTE_I40E_PMD
+#ifdef RTE_NET_I40E
 				if (ret == -ENOTSUP)
 					ret = rte_pmd_i40e_set_vf_mac_addr(
 							portid, w, &eth);
 #endif
-#ifdef RTE_LIBRTE_BNXT_PMD
+#ifdef RTE_NET_BNXT
 				if (ret == -ENOTSUP)
 					ret = rte_pmd_bnxt_set_vf_mac_addr(
 							portid, w, &eth);

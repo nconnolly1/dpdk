@@ -40,7 +40,7 @@ all_examples = [
 	'server_node_efd/node',
 	'server_node_efd/server',
 	'service_cores',
-	'skeleton', 'tep_termination',
+	'skeleton',
 	'timer', 'vdpa',
 	'vhost', 'vhost_crypto',
 	'vhost_blk', 'vm_power_manager',
@@ -81,9 +81,6 @@ foreach example: examples
 	ext_deps = [execinfo]
 	includes = [include_directories(example)]
 	deps = ['eal', 'mempool', 'net', 'mbuf', 'ethdev', 'cmdline']
-	if is_windows
-		deps = ['eal'] # only supported lib on Windows currently
-	endif
 	subdir(example)
 
 	if build
