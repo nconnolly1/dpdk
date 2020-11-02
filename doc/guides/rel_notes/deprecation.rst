@@ -87,8 +87,6 @@ Deprecation Notices
   The following static fields will be moved as dynamic:
 
   - ``timestamp``
-  - ``userdata`` / ``udata64``
-  - ``seqn``
 
   As a consequence, the layout of the ``struct rte_mbuf`` will be re-arranged,
   avoiding impact on vectorized implementation of the driver datapaths,
