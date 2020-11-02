@@ -93,6 +93,8 @@ foreach l:libraries
 			shared_deps += [get_variable('shared_rte_' + d)]
 			static_deps += [get_variable('static_rte_' + d)]
 		endforeach
+		shared_deps += eal_shared_deps
+		static_deps += eal_static_deps
 	endif
 
 	if not build

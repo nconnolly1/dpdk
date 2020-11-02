@@ -21,6 +21,9 @@ dpdk_drivers = []
 dpdk_extra_ldflags = []
 dpdk_libs_disabled = []
 dpdk_drvs_disabled = []
+eal_shared_deps = []
+eal_static_deps = []
+eal_exclude_list = []
 abi_version_file = files('ABI_VERSION')
 
 if host_machine.cpu_family().startswith('x86')
@@ -31,18 +34,19 @@ elif host_machine.cpu_family().startswith('ppc')
 	arch_subdir = 'ppc'
 endif
 
+# do configuration and get tool paths
+subdir('buildtools')
+subdir('config')
+
 # configure the build, and make sure configs here and in config folder are
 # able to be included in any file. We also store a global array of include dirs
 # for passing to pmdinfogen scripts
 global_inc = include_directories('.', 'config',
 	'lib/librte_eal/include',
-	'lib/librte_eal/@0@/include'.format(host_machine.system()),
+	'lib/librte_eal/@0@/include@1@'.format(host_machine.system(),
+		(eal_exclude_list.length() != 0) ? '/eal' : ''),
 	'lib/librte_eal/@0@/include'.format(arch_subdir),
 )
-
-# do configuration and get tool paths
-subdir('buildtools')
-subdir('config')
 
 # build libs and drivers
 subdir('buildtools/pmdinfogen')

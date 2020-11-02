@@ -92,6 +92,7 @@ foreach example: examples
 			endif
 			dep_objs += [get_variable(var_name)]
 		endforeach
+		dep_objs += get_variable('eal_' + get_option('default_library') + '_deps')
 		if allow_experimental_apis
 			cflags += '-DALLOW_EXPERIMENTAL_API'
 		endif

@@ -302,3 +302,13 @@ if get_option('b_lto')
 		add_project_link_arguments('-Wno-lto-type-mismatch', language: 'c')
 	endif
 endif
+
+# Include EAL dependencies
+foreach p : get_option('eal_deps')
+	name = p.strip()
+	project = subproject(name)
+	project_dep = project.get_variable(name + '_dep')
+	eal_shared_deps += project.get_variable(name + 'shared_dep', project_dep)
+	eal_static_deps += project.get_variable(name + 'static_dep', project_dep)
+	eal_exclude_list += project.get_variable('eal_header_files', [])
+endforeach
